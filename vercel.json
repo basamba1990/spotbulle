@@ -1,0 +1,19 @@
+{
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "dist/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
