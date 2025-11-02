@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext'; // CORRECTION : Chemin mis à jour (context au lieu de contexts)
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import VideoPlayer from '../components/VideoPlayer';
 import VideoAnalysisResults from '../components/VideoAnalysisResults';
 import TranscriptionViewer from '../components/TranscriptionViewer';
 import VideoProcessingStatus from '../components/VideoProcessingStatus';
+import { Button } from '../components/ui/button-enhanced.jsx';
 
 const VideoManagement = () => {
   const { user } = useAuth();
@@ -15,52 +16,23 @@ const VideoManagement = () => {
   const [error, setError] = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [processingVideoId, setProcessingVideoId] = useState(null);
-  
-  // CORRECTION : Utiliser useRef pour éviter les re-créations inutiles
+  const [analysisProgress, setAnalysisProgress] = useState({});
   const channelRef = useRef(null);
   const mountedRef = useRef(true);
 
-  // Récupérer les statistiques utilisateur
   const fetchStats = useCallback(async () => {
     if (!user || !mountedRef.current) return;
 
     try {
-      const { data, error } = await supabase
-        .rpc('get_user_video_stats', { _user_id: user.id })
-        .single();
-
-      if (error) {
-        console.error('Erreur lors de la récupération des statistiques:', error);
-        setError('Impossible de récupérer les statistiques.');
-        return;
-      }
-
-      if (mountedRef.current) {
-        setStats(data);
-      }
-    } catch (err) {
-      console.error('Exception inattendue:', err);
-      setError('Une erreur inattendue s\'est produite.');
-    }
-  }, [user]);
-
-  // Rafraîchir les statistiques
-  const refreshStats = async () => {
-    try {
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      if (authError) {
-        throw new Error('Erreur d\'authentification: ' + authError.message);
-      }
-
-      const token = authData?.session?.access_token;
-      if (!token) {
-        throw new Error('Session expirée, veuillez vous reconnecter');
+      const { data: session, error: authError } = await supabase.auth.getSession();
+      if (authError || !session?.session?.access_token) {
+        throw new Error('Session non valide, veuillez vous reconnecter');
       }
 
       const response = await fetch('https://nyxtckjfaajhacboxojd.supabase.co/functions/v1/refresh-user-video-stats', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.session.access_token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -70,6 +42,45 @@ const VideoManagement = () => {
       }
 
       const result = await response.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (mountedRef.current) {
+        setStats(result.stats);
+      }
+    } catch (err) {
+      console.error('Erreur lors de la récupération des statistiques:', err);
+      if (mountedRef.current) {
+        setError('Impossible de récupérer les statistiques.');
+      }
+    }
+  }, [user]);
+
+  const refreshStats = async () => {
+    try {
+      const { data: session, error: authError } = await supabase.auth.getSession();
+      if (authError || !session?.session?.access_token) {
+        throw new Error('Session non valide, veuillez vous reconnecter');
+      }
+
+      const response = await fetch('https://nyxtckjfaajhacboxojd.supabase.co/functions/v1/refresh-user-video-stats', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
       if (mountedRef.current) {
         setStats(result.stats);
         toast.success('Statistiques mises à jour avec succès');
@@ -105,8 +116,6 @@ const VideoManagement = () => {
     setError(null);
 
     try {
-      console.log('Récupération des vidéos pour user_id:', user.id);
-
       if (!supabase) {
         throw new Error('Supabase client non initialisé');
       }
@@ -137,22 +146,21 @@ const VideoManagement = () => {
         .order('created_at', { ascending: false });
 
       if (supabaseError) {
-        console.error('Erreur Supabase:', supabaseError);
         throw new Error(`Erreur Supabase: ${supabaseError.message}`);
       }
-
-      console.log('Videos data received:', data);
 
       const normalizedVideos = (data || []).map((video) => {
         const hasTranscription = !!(video.transcription_text || video.transcription_data);
         let analysisData = video.analysis || {};
 
-        if ((!analysisData || Object.keys(analysisData).length === 0) && video.ai_result) {
-          try {
-            analysisData = JSON.parse(video.ai_result);
-          } catch (e) {
-            console.error('Erreur lors du parsing de ai_result:', e);
-            analysisData = { summary: video.ai_result };
+        if (!analysisData || Object.keys(analysisData).length === 0) {
+          if (video.ai_result) {
+            try {
+              analysisData = JSON.parse(video.ai_result);
+            } catch (e) {
+              console.error('Erreur lors du parsing de ai_result:', e);
+              analysisData = { summary: video.ai_result };
+            }
           }
         }
 
@@ -196,14 +204,14 @@ const VideoManagement = () => {
         };
       });
 
-      if (!mountedRef.current) return;
-
-      setVideos(normalizedVideos);
-      setSelectedVideo((prevSelected) => {
-        if (!prevSelected) return null;
-        const updatedSelected = normalizedVideos.find((v) => v.id === prevSelected.id);
-        return updatedSelected || null;
-      });
+      if (mountedRef.current) {
+        setVideos(normalizedVideos);
+        setSelectedVideo((prevSelected) => {
+          if (!prevSelected) return null;
+          const updatedSelected = normalizedVideos.find((v) => v.id === prevSelected.id);
+          return updatedSelected || null;
+        });
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des vidéos:', error);
       if (mountedRef.current) {
@@ -243,6 +251,156 @@ const VideoManagement = () => {
     }
   };
 
+  // NOUVELLE FONCTION : Déclenchement manuel de l'analyse
+  const triggerManualAnalysis = async (video) => {
+    if (!video) return;
+
+    try {
+      setProcessingVideoId(video.id);
+      setAnalysisProgress(prev => ({
+        ...prev,
+        [video.id]: { step: 'Démarrage de l\'analyse...', progress: 10 }
+      }));
+
+      toast.loading('Déclenchement de l\'analyse IA...', { id: 'manual-analysis-toast' });
+
+      const { data: session, error: authError } = await supabase.auth.getSession();
+      if (authError || !session?.session?.access_token) {
+        throw new Error('Session non valide, veuillez vous reconnecter');
+      }
+
+      // Étape 1: Transcription
+      setAnalysisProgress(prev => ({
+        ...prev,
+        [video.id]: { step: 'Transcription en cours...', progress: 30 }
+      }));
+
+      const transcribeResponse = await fetch(
+        'https://nyxtckjfaajhacboxojd.supabase.co/functions/v1/transcribe-video',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({ video_id: video.id }),
+        }
+      );
+
+      if (!transcribeResponse.ok) {
+        let errorMessage = 'Erreur lors de la transcription';
+        try {
+          const errorResult = await transcribeResponse.json();
+          errorMessage = errorResult.error || errorResult.details || errorMessage;
+        } catch (e) {
+          errorMessage = `${transcribeResponse.status} ${transcribeResponse.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const transcribeResult = await transcribeResponse.json();
+      if (transcribeResult.error) {
+        throw new Error(transcribeResult.error);
+      }
+
+      setAnalysisProgress(prev => ({
+        ...prev,
+        [video.id]: { step: 'Transcription terminée, analyse en cours...', progress: 60 }
+      }));
+
+      toast.success('Transcription terminée, analyse IA en cours...', { id: 'manual-analysis-toast' });
+
+      // Attendre que la transcription soit complète avant l'analyse
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Étape 2: Analyse
+      setAnalysisProgress(prev => ({
+        ...prev,
+        [video.id]: { step: 'Analyse IA en cours...', progress: 80 }
+      }));
+
+      const analyzeResponse = await fetch(
+        'https://nyxtckjfaajhacboxojd.supabase.co/functions/v1/analyze-transcription',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.session.access_token}`,
+          },
+          body: JSON.stringify({ video_id: video.id }),
+        }
+      );
+
+      if (!analyzeResponse.ok) {
+        let errorMessage = 'Erreur lors de l\'analyse';
+        try {
+          const errorResult = await analyzeResponse.json();
+          errorMessage = errorResult.error || errorMessage;
+        } catch (e) {
+          errorMessage = `${analyzeResponse.status} ${analyzeResponse.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const analyzeResult = await analyzeResponse.json();
+      if (analyzeResult.error) {
+        throw new Error(analyzeResult.error);
+      }
+
+      setAnalysisProgress(prev => ({
+        ...prev,
+        [video.id]: { step: 'Analyse terminée !', progress: 100 }
+      }));
+
+      toast.success('Analyse IA terminée avec succès !', { id: 'manual-analysis-toast' });
+
+      // Mettre à jour l'interface
+      setVideos((prev) =>
+        prev.map((v) => (v.id === video.id ? { ...v, status: 'analyzed' } : v))
+      );
+      setSelectedVideo((prev) =>
+        prev?.id === video.id ? { ...prev, status: 'analyzed' } : prev
+      );
+
+      // Rafraîchir les données après un court délai
+      setTimeout(() => {
+        if (mountedRef.current) {
+          fetchVideos();
+          fetchStats();
+        }
+      }, 2000);
+
+    } catch (err) {
+      console.error('Erreur lors de l\'analyse manuelle:', err);
+      let errorMessage = err.message;
+
+      if (errorMessage.includes('Échec de confirmation de la mise à jour')) {
+        errorMessage = 'Problème de connexion à la base de données. Veuillez réessayer.';
+      }
+
+      toast.error(`Erreur: ${errorMessage}`, { id: 'manual-analysis-toast' });
+
+      setVideos((prev) =>
+        prev.map((v) =>
+          v.id === video.id ? { ...v, status: 'failed', error_message: errorMessage } : v
+        )
+      );
+      setSelectedVideo((prev) =>
+        prev?.id === video.id ? { ...prev, status: 'failed', error_message: errorMessage } : prev
+      );
+    } finally {
+      setProcessingVideoId(null);
+      // Nettoyer la progression après 3 secondes
+      setTimeout(() => {
+        setAnalysisProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[video.id];
+          return newProgress;
+        });
+      }, 3000);
+    }
+  };
+
   const transcribeVideo = async (video) => {
     if (!video) return;
 
@@ -250,21 +408,16 @@ const VideoManagement = () => {
       setProcessingVideoId(video.id);
       toast.loading('Démarrage de la transcription...', { id: 'transcribe-toast' });
 
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      if (authError) {
-        throw new Error('Erreur d\'authentification: ' + authError.message);
-      }
-
-      const token = authData?.session?.access_token;
-      if (!token) {
-        throw new Error('Session expirée, veuillez vous reconnecter');
+      const { data: session, error: authError } = await supabase.auth.getSession();
+      if (authError || !session?.session?.access_token) {
+        throw new Error('Session non valide, veuillez vous reconnecter');
       }
 
       const response = await fetch('https://nyxtckjfaajhacboxojd.supabase.co/functions/v1/transcribe-video', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.session.access_token}`,
         },
         body: JSON.stringify({ video_id: video.id }),
       });
@@ -273,18 +426,14 @@ const VideoManagement = () => {
         let errorMessage = 'Erreur lors de la transcription';
         try {
           const errorResult = await response.json();
-          console.error('Détails de l\'erreur:', errorResult);
           errorMessage = errorResult.error || errorResult.details || errorMessage;
         } catch (e) {
-          console.error('Erreur lors du parsing de la réponse d\'erreur:', e);
           errorMessage = `${response.status} ${response.statusText}`;
         }
         throw new Error(errorMessage);
       }
 
       const result = await response.json();
-      console.log('Résultat de la transcription:', result);
-
       if (result.error) {
         throw new Error(result.error);
       }
@@ -334,14 +483,9 @@ const VideoManagement = () => {
       setProcessingVideoId(video.id);
       toast.loading('Démarrage de l\'analyse IA...', { id: 'analyze-toast' });
 
-      const { data: authData, error: authError } = await supabase.auth.getSession();
-      if (authError) {
-        throw new Error('Erreur d\'authentification: ' + authError.message);
-      }
-
-      const token = authData?.session?.access_token;
-      if (!token) {
-        throw new Error('Session expirée, veuillez vous reconnecter');
+      const { data: session, error: authError } = await supabase.auth.getSession();
+      if (authError || !session?.session?.access_token) {
+        throw new Error('Session non valide, veuillez vous reconnecter');
       }
 
       const response = await fetch(
@@ -350,7 +494,7 @@ const VideoManagement = () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${session.session.access_token}`,
           },
           body: JSON.stringify({ video_id: video.id }),
         }
@@ -676,6 +820,22 @@ const VideoManagement = () => {
                   {video.status === 'failed' && video.error_message && (
                     <p className="text-xs text-red-500 mt-1 truncate">{video.error_message}</p>
                   )}
+                  
+                  {/* Indicateur de progression pour l'analyse manuelle */}
+                  {analysisProgress[video.id] && (
+                    <div className="mt-2 bg-blue-50 p-2 rounded">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span>{analysisProgress[video.id].step}</span>
+                        <span>{analysisProgress[video.id].progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div 
+                          className="bg-blue-600 h-1.5 rounded-full" 
+                          style={{ width: `${analysisProgress[video.id].progress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -721,38 +881,53 @@ const VideoManagement = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-4">
+                  {/* NOUVEAU BOUTON : Analyse complète */}
+                  <Button
+                    onClick={() => triggerManualAnalysis(selectedVideo)}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                    disabled={processingVideoId === selectedVideo.id}
+                  >
+                    {processingVideoId === selectedVideo.id ? (
+                      <>🔍 Analyse en cours...</>
+                    ) : (
+                      <>🤖 Analyser avec IA</>
+                    )}
+                  </Button>
+
                   {selectedVideo.status !== 'processing' &&
                     selectedVideo.status !== 'analyzing' &&
                     selectedVideo.status !== 'transcribing' && (
                       <>
-                        <button
-                          onClick={() => transcribeVideo(selectedVideo)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                          disabled={processingVideoId === selectedVideo.id || selectedVideo.hasTranscription}
-                        >
-                          {processingVideoId === selectedVideo.id
-                            ? 'Transcription en cours...'
-                            : 'Transcrire la vidéo'}
-                        </button>
+                        {!selectedVideo.hasTranscription && (
+                          <Button
+                            onClick={() => transcribeVideo(selectedVideo)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={processingVideoId === selectedVideo.id}
+                          >
+                            {processingVideoId === selectedVideo.id
+                              ? 'Transcription en cours...'
+                              : 'Transcrire la vidéo'}
+                          </Button>
+                        )}
                         {selectedVideo.hasTranscription && !selectedVideo.hasAnalysis && (
-                          <button
+                          <Button
                             onClick={() => analyzeVideo(selectedVideo)}
-                            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                            className="bg-purple-600 hover:bg-purple-700 text-white"
                             disabled={processingVideoId === selectedVideo.id}
                           >
                             {processingVideoId === selectedVideo.id
                               ? 'Analyse en cours...'
-                              : 'Analyser la vidéo'}
-                          </button>
+                              : 'Analyser la transcription'}
+                          </Button>
                         )}
                       </>
                     )}
-                  <button
+                  <Button
                     onClick={() => deleteVideo(selectedVideo)}
-                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                    className="bg-red-600 hover:bg-red-700 text-white"
                   >
                     Supprimer
-                  </button>
+                  </Button>
                 </div>
 
                 {selectedVideo.hasTranscription && (
@@ -774,8 +949,8 @@ const VideoManagement = () => {
                   selectedVideo.status !== 'failed' && (
                     <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
                       <p>
-                        Aucune transcription ou analyse disponible pour cette vidéo. Lancez la
-                        transcription ou l'analyse ci-dessus.
+                        Aucune transcription ou analyse disponible pour cette vidéo. 
+                        Utilisez le bouton "Analyser avec IA" pour lancer le processus complet.
                       </p>
                     </div>
                   )}
