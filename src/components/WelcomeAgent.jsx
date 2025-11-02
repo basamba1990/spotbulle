@@ -1,159 +1,277 @@
+// src/components/WelcomeAgent.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './ui/button-enhanced.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
+import UserJourneyOnboarding from './UserJourneyOnboarding.jsx';
 
 const WelcomeAgent = ({ onOpenAuthModal }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showFeatures, setShowFeatures] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const audioRef = useRef(null);
-  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-  const welcomeMessage = `
-    Bonjour et bienvenue sous le dôme SpotBulle ! 
-    Ici, vous allez vivre une expérience unique autour de la passion du sport et des valeurs de la Coupe d'Afrique des Nations.
-    Installez-vous confortablement, exprimez votre passion ou votre besoin devant la caméra,
-    et votre vidéo sera analysée par notre intelligence artificielle pour vous offrir une expérience personnalisée.
-    Prêt à commencer ? L'aventure vous attend !
-  `;
+  const welcomeMessage = `Bienvenue sur SpotBulle - Votre plateforme de connexion France-Maroc !
+
+Ici, vous allez :
+• Rencontrer des passionnés partageant vos centres d'intérêt
+• Améliorer votre communication grâce à des retours personnalisés
+• Créer des liens authentiques au sein de notre communauté
+• Développer vos compétences avec des analyses vidéo avancées
+
+Prêt à commencer votre aventure ?`;
+
+  const features = [
+    {
+      icon: '🎯',
+      title: 'Trouvez votre communauté',
+      description: 'Connectez-vous avec des passionnés France-Maroc'
+    },
+    {
+      icon: '🎥',
+      title: 'Exprimez-vous en vidéo',
+      description: 'Partagez vos passions avec authenticité'
+    },
+    {
+      icon: '📊',
+      title: 'Analyse avancée',
+      description: 'Recevez des retours sur votre communication'
+    },
+    {
+      icon: '🤝',
+      title: 'Réseau qualité',
+      description: 'Créez des connexions significatives'
+    }
+  ];
 
   const generateSpeech = async () => {
     try {
       setIsLoading(true);
       setIsPlaying(true);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/tts`, {
+      const response = await fetch('/functions/tts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ text: welcomeMessage }),
+        body: JSON.stringify({
+          text: welcomeMessage,
+          voice: 'alloy'
+        }),
       });
 
-      if (!response.ok) throw new Error('Erreur lors de la génération audio');
+      if (!response.ok) {
+        throw new Error('Erreur lors de la génération audio');
+      }
+
       const audioBlob = await response.blob();
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
-
+      
       if (audioRef.current) {
         audioRef.current.src = url;
-        audioRef.current.play().catch(error => {
-          console.error('Erreur de lecture audio:', error);
-          toast.error('Erreur de lecture audio.');
-          setIsPlaying(false);
-        });
+        await audioRef.current.play();
       }
     } catch (error) {
-      console.error('Erreur TTS:', error);
-      toast.error('Erreur lors de la génération audio.');
+      console.error('Erreur génération audio:', error);
+      toast.error('Erreur lors de la génération audio');
       setIsPlaying(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    generateSpeech(); // Jouer le TTS automatiquement au chargement
-    return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
-    };
-  }, [audioUrl]);
-
   const handleStartExperience = async () => {
-    if (loading) return;
-    if (!user) {
-      onOpenAuthModal();
+    if (!showFeatures) {
+      setShowFeatures(true);
+      await generateSpeech();
     } else {
-      navigate('/register'); // Rediriger vers l'enregistrement au lieu de record-video
+      navigate('/record-video');
     }
   };
 
+  const handleSkipToAuth = () => {
+    onOpenAuthModal();
+  };
+
+  const handleDiscoverPlatform = () => {
+    setShowOnboarding(true);
+  };
+
+  const handleGoBack = () => {
+    if (showFeatures) {
+      setShowFeatures(false);
+    } else if (showOnboarding) {
+      setShowOnboarding(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-blue-900 to-red-700 overflow-hidden">
-      <div className="absolute inset-0 bg-[url('/images/can-bg.jpg')] bg-cover bg-center opacity-20 animate-pulse-slow" />
-      <div className="absolute top-10 left-10 w-24 h-24 opacity-60 animate-float">⚽</div>
-      <div className="absolute bottom-10 right-10 w-24 h-24 opacity-60 animate-float" style={{ animationDelay: '2s' }}>🏆</div>
-      <div className="absolute top-1/3 right-1/4 w-16 h-16 opacity-40 animate-float" style={{ animationDelay: '4s' }}>🌟</div>
+    <div className="relative min-h-screen flex flex-col items-center justify-center text-gray-900 bg-gradient-to-br from-blue-50 via-white to-indigo-100 p-8">
+      {/* Background Pattern léger */}
+      <div className="absolute inset-0 bg-white/60"></div>
+      
+      <div className="relative max-w-6xl w-full bg-white/80 backdrop-blur-md rounded-3xl p-8 md:p-12 border-2 border-white shadow-2xl text-center">
+        
+        {/* ✅ CORRIGÉ : Bouton retour visible */}
+        {(showFeatures || showOnboarding) && (
+          <button 
+            onClick={handleGoBack}
+            className="absolute top-6 left-6 text-gray-600 hover:text-gray-900 transition-colors flex items-center gap-2 bg-white/80 rounded-full px-4 py-2 shadow-sm border border-gray-200"
+          >
+            ← Retour
+          </button>
+        )}
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen text-center text-white p-8">
-        <div className="max-w-4xl bg-black/50 backdrop-blur-md rounded-3xl p-8 md:p-12 border-2 border-gold shadow-2xl">
-          <div className="mb-6 flex justify-center">
-            <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center p-4">
-              <span className="text-4xl">⚽</span>
-            </div>
-          </div>
-
-          <h1 className="text-4xl md:text-5xl font-bold mb-6 text-gold animate-bounce">
-            🌟 Bienvenue à SpotBulle 🌟
-          </h1>
-
-          <div className="text-lg md:text-xl mb-8 leading-relaxed bg-white/10 p-6 rounded-xl">
-            {welcomeMessage}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              onClick={handleStartExperience}
-              disabled={isLoading || loading}
-              className="relative bg-gradient-to-r from-blue-600 to-red-600 hover:from-blue-700 hover:to-red-700 text-white text-xl font-bold py-4 px-8 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 shadow-lg hover:shadow-xl overflow-hidden group"
-            >
-              <span className="relative z-10 flex items-center justify-center">
-                {isLoading ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Génération de l’audio...
-                  </>
-                ) : isPlaying ? (
-                  '🎤 Écoutez votre accueil...'
-                ) : (
-                  '🎤 Démarrer l’expérience'
-                )}
-              </span>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/20 group-hover:from-white/10 group-hover:to-white/30 transform group-hover:scale-110 transition-transform duration-300" />
-            </Button>
-
-            <Button
-              onClick={onOpenAuthModal}
-              className="bg-gradient-to-r from-green-600 to-green-800 hover:from-green-700 hover:to-green-900 text-white font-bold py-4 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-            >
-              Se connecter
-            </Button>
-          </div>
-
-          {(isLoading || isPlaying) && (
-            <div className="mt-8 flex flex-col items-center space-y-4">
-              <div className="flex space-x-2">
-                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                <div className="w-3 h-3 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+        {!showFeatures && !showOnboarding ? (
+          // Écran d'accueil initial - ✅ CORRIGÉ : Couleurs claires
+          <>
+            <div className="mb-8">
+              <div className="flex justify-center items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-blue-500 rounded-full shadow-md"></div>
+                <div className="w-12 h-12 bg-white rounded-full border-2 border-yellow-400 shadow-md"></div>
+                <div className="w-12 h-12 bg-indigo-500 rounded-full shadow-md"></div>
               </div>
-              <p className="text-sm text-blue-200">
-                {isPlaying ? 'Expérience d’accueil en cours...' : 'Préparation de votre accueil...'}
+              <h1 className="text-5xl md:text-6xl font-french font-bold mb-6 text-gray-900">
+                🇫🇷🇲🇦 SpotBulle
+              </h1>
+              <p className="text-xl md:text-2xl text-blue-600 mb-4 font-medium">
+                La communauté qui connecte la France et le Maroc
               </p>
             </div>
-          )}
-        </div>
+
+            <div className="text-lg md:text-xl mb-8 leading-relaxed bg-white/60 p-8 rounded-2xl border border-gray-200 shadow-sm">
+              <p className="mb-4">🎉 <strong>Bienvenue sous le dôme SpotBulle !</strong></p>
+              <p className="mb-4 text-gray-700">
+                Votre plateforme pour rencontrer des passionnés, partager vos talents 
+                et développer votre réseau au sein de la communauté France-Maroc.
+              </p>
+              <p className="text-blue-600 font-semibold">
+                Prêt à découvrir une nouvelle façon de vous connecter ?
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Button 
+                onClick={handleDiscoverPlatform}
+                className="btn-spotbulle text-lg py-4 px-8 rounded-full group relative overflow-hidden bg-blue-600 hover:bg-blue-700 text-white border-0"
+              >
+                <span className="relative z-10 flex items-center justify-center">
+                  🚀 Découvrir SpotBulle
+                </span>
+              </Button>
+
+              <Button 
+                onClick={handleStartExperience}
+                disabled={isLoading}
+                className="bg-white text-blue-600 hover:bg-blue-50 border border-blue-600 text-lg py-4 px-8 rounded-full transition-all duration-300"
+              >
+                🎤 Démarrer l'expérience
+              </Button>
+
+              <Button 
+                onClick={handleSkipToAuth}
+                className="bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 text-lg py-4 px-8 rounded-full transition-all duration-300"
+              >
+                Se connecter
+              </Button>
+              <Button 
+                onClick={() => navigate('/psg-signup')}
+                className="bg-[#0A122A] text-white hover:bg-[#11183a] border border-[#DA291C]/40 text-lg py-4 px-8 rounded-full transition-all duration-300"
+              >
+                🔵🔴 Inscription PSG
+              </Button>
+            </div>
+
+            <div className="mt-8 text-gray-600 text-sm">
+              <p>Déjà membre ? Connectez-vous pour accéder à votre espace personnel</p>
+            </div>
+          </>
+        ) : showOnboarding ? (
+          // Onboarding
+          <UserJourneyOnboarding 
+            onComplete={() => setShowOnboarding(false)}
+            currentStep={0}
+          />
+        ) : (
+          // Écran des fonctionnalités - ✅ CORRIGÉ : Navigation claire
+          <>
+            <h2 className="text-3xl md:text-4xl font-french font-bold mb-8 text-gray-900">
+              Découvrez SpotBulle
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {features.map((feature, index) => (
+                <div key={index} className="bg-white rounded-xl p-6 border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300">
+                  <div className="text-3xl mb-3">{feature.icon}</div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.title}</h3>
+                  <p className="text-gray-600">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white rounded-xl p-6 mb-8 border border-gray-200 shadow-sm">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">🎙️ Votre accueil personnalisé</h3>
+              <p className="text-gray-600 mb-4">
+                Écoutez le message de bienvenue généré spécialement pour vous !
+              </p>
+              <div className="flex items-center justify-center gap-4">
+                <Button
+                  onClick={generateSpeech}
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                >
+                  {isPlaying ? '🎵 En cours...' : '🔊 Réécouter'}
+                </Button>
+                {isPlaying && (
+                  <span className="text-blue-600 animate-pulse">Lecture en cours...</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button 
+                onClick={() => navigate('/record-video')}
+                className="btn-spotbulle text-lg py-4 px-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white border-0"
+              >
+                🚀 Commencer mon aventure
+              </Button>
+              
+              <Button 
+                onClick={onOpenAuthModal}
+                className="bg-white text-blue-600 hover:bg-blue-50 border border-blue-600 text-lg py-4 px-8 rounded-full"
+              >
+                📝 Créer mon profil
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
-      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} onError={() => setIsPlaying(false)} />
+      <audio 
+        ref={audioRef} 
+        onEnded={() => setIsPlaying(false)}
+        onError={(e) => {
+          console.error('Erreur lecture audio:', e);
+          setIsPlaying(false);
+          toast.error('Erreur de lecture audio.');
+        }}
+      />
+
+      {/* Footer */}
+      <div className="absolute bottom-4 text-center text-gray-600 text-sm">
+        <p>SpotBulle - Connecter, Partager, Grandir ensemble 🇫🇷🇲🇦</p>
+      </div>
     </div>
   );
 };
