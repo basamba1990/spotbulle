@@ -1,505 +1,528 @@
-import React, { useState, useEffect } from 'react';
-import { AuthProvider } from './context/AuthContext.jsx';
-import AuthModal from './AuthModal.jsx';
-import Dashboard from './components/Dashboard.jsx';
-import VideoManagement from './pages/VideoManagement.jsx';
-import EnhancedVideoUploader from './components/EnhancedVideoUploader.jsx';
-import ProgressTracking from './components/ProgressTracking.jsx';
-import ErrorBoundaryEnhanced, { SupabaseErrorFallback } from './components/ErrorBoundaryEnhanced.jsx';
-import EmptyState from './components/EmptyState.jsx';
-import ProfessionalHeader from './components/ProfessionalHeader.jsx';
-import ModernTabs from './components/ModernTabs.jsx';
-import WelcomeAgent from './components/WelcomeAgent.jsx'; // Import du nouveau composant
-import { useAuth } from './context/AuthContext.jsx';
-import { Button } from './components/ui/button-enhanced.jsx';
-import { Tabs, TabsContent } from './components/ui/tabs.jsx';
-import { supabase, fetchDashboardData, checkSupabaseConnection, retryOperation } from './lib/supabase.js';
-import { RefreshCw, AlertTriangle, Video, Upload, BarChart3, FileText } from 'lucide-react';
-import LoadingScreen from './components/LoadingScreen.jsx';
-import { SkeletonDashboard } from './components/ui/skeleton.jsx';
-import SupabaseDiagnostic from './components/SupabaseDiagnostic.jsx';
-import VideoProcessingStatus from './components/VideoProcessingStatus.jsx';
-import './App.css';
-import './styles/design-system.css';
+// ✅ VERSION CORRIGÉE : App.jsx
+import React, { useState, useEffect, useCallback } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import {
+  SessionContextProvider,
+  useUser,
+  useSupabaseClient,
+} from "@supabase/auth-helpers-react";
+import { supabase } from "./lib/supabase.js";
+import { Toaster, toast } from "sonner";
 
-function AppContent() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+// Import des composants
+import AuthModal from "./AuthModal.jsx";
+import Dashboard from "./components/Dashboard.jsx";
+import ErrorBoundaryEnhanced, {
+  SupabaseErrorFallback,
+} from "./components/ErrorBoundaryEnhanced.jsx";
+import WelcomeAgent from "./components/WelcomeAgent.jsx";
+import { checkSupabaseConnection } from "./lib/supabase.js";
+import LoadingScreen from "./components/LoadingScreen.jsx";
+import SupabaseDiagnostic from "./components/SupabaseDiagnostic.jsx";
+import AuthCallback from "@/pages/AuthCallback.jsx";
+import ResetPassword from "@/pages/ResetPassword.jsx";
+import EnhancedRecordVideo from "@/pages/enhanced-record-video.jsx";
+import VideoSuccess from "@/pages/video-success.jsx";
+import Directory from "@/pages/directory.jsx";
+import Login from "@/pages/login.jsx";
+import Home from "@/pages/home.jsx";
+import VideoAnalysisPage from "@/pages/video-analysis.jsx";
+import VideoVault from "@/pages/video-vault.jsx";
+import FourColorsTest from "@/components/FourColorsTest.jsx";
+import SeminarsList from "@/components/SeminarsList.jsx";
+import Certification from "@/components/Certification.jsx";
+import SimplifiedHome from "@/pages/SimplifiedHome.jsx";
+
+import "./App.css";
+import "./styles/design-system.css";
+import { TransformationDemo } from "./pages/TransformationDemo.jsx";
+import { PsgSignup } from "./pages/psg-signup.jsx";
+import { PsgSignin } from "./pages/psg-signin.jsx";
+import FootballChatTest from "./pages/FootballChatTest.jsx";
+import SpotBullePremium from "./pages/SpotBullePremium.jsx";
+
+// ✅ COMPOSANT : Gestion d'authentification simplifiée
+const RequireAuth = ({ children, fallbackPath = "/login" }) => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      console.log("🔐 Redirection vers login - utilisateur non authentifié");
+      navigate(fallbackPath, { replace: true });
+    }
+  }, [user, loading, navigate, fallbackPath]);
+
+  if (loading) {
+    return (
+      <LoadingScreen
+        message="Vérification de sécurité..."
+        subtitle="Authentification en cours"
+      />
+    );
+  }
+
+  return user ? children : <Navigate to={fallbackPath} replace />;
+};
+
+// ✅ COMPOSANT : Gestion des erreurs
+const ErrorBoundaryWrapper = ({ children }) => (
+  <ErrorBoundaryEnhanced
+    FallbackComponent={SupabaseErrorFallback}
+    onError={(error, errorInfo) => {
+      console.error("🚨 Erreur Application:", error, errorInfo);
+    }}
+  >
+    {children}
+  </ErrorBoundaryEnhanced>
+);
+
+// ✅ COMPOSANT : Service Worker
+const ServiceWorkerRegistration = () => {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((registration) => {
+          console.log("✅ Service Worker enregistré:", registration);
+        })
+        .catch((error) => {
+          console.log("❌ Erreur Service Worker:", error);
+        });
+    }
+  }, []);
+
+  return null;
+};
+
+// ✅ BOUTON DE SECOURS (si import manquant)
+const FallbackButton = ({ onClick, children, ...props }) => (
+  <button
+    onClick={onClick}
+    style={{
+      padding: "10px 20px",
+      background: "hsl(222.2 84% 4.9%)",
+      color: "white",
+      border: "none",
+      borderRadius: "6px",
+      cursor: "pointer",
+    }}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
+// ✅ COMPOSANT PRINCIPAL SIMPLIFIÉ
+const AppContent = () => {
+  const navigate = useNavigate();
+  const supabase = useSupabaseClient();
+  const { user, signOut, profile } = useAuth();
+
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [supabaseError, setSupabaseError] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState("checking");
+  const [cameraChecked, setCameraChecked] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [dashboardError, setDashboardError] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('connected');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true); // État pour contrôler l'affichage de WelcomeAgent
-  const { user, loading, signOut, profile, error: authError, connectionStatus: authConnectionStatus } = useAuth();
 
-  // CORRECTION: Gestion améliorée de l'état d'authentification
+  // ✅ Vérification connexion Supabase
   useEffect(() => {
-    if (!loading) {
-      if (user && profile) {
-        setIsAuthenticated(true);
-        setShowWelcome(false); // Cacher WelcomeAgent une fois authentifié
-        console.log('Utilisateur authentifié avec profil:', user.id, profile);
-        // Fermer automatiquement le modal d'auth si ouvert
-        if (isAuthModalOpen) {
-          setIsAuthModalOpen(false);
+    const initializeApp = async () => {
+      try {
+        console.log("🔄 Initialisation SpotBulle...");
+        const result = await checkSupabaseConnection();
+
+        if (result.connected) {
+          setConnectionStatus("connected");
+          setSupabaseError(null);
+          console.log("✅ Connexion Supabase établie");
+        } else {
+          setConnectionStatus("disconnected");
+          setSupabaseError(result.error);
+          console.error("❌ Connexion Supabase échouée:", result.error);
         }
-        // Charger les données du dashboard si on est sur l'onglet dashboard
-        if (activeTab === 'dashboard') {
-          setTimeout(() => {
-            loadDashboardData().catch(err => {
-              console.error('Erreur lors du chargement initial des données:', err);
-            });
-          }, 500);
-        }
-      } else {
-        setIsAuthenticated(false);
-        setDashboardData(null);
-        setShowWelcome(true); // Afficher WelcomeAgent si non authentifié
+      } catch (err) {
+        console.error("❌ Erreur initialisation:", err);
+        setConnectionStatus("disconnected");
+        setSupabaseError(err.message);
       }
-    }
-  }, [user, profile, loading, activeTab, isAuthModalOpen]);
+    };
 
-  // Vérifier la connexion à Supabase avec gestion d'erreur robuste
+    initializeApp();
+  }, []);
+
+  // ✅ Vérification permissions caméra
   useEffect(() => {
-    if (!loading) {
-      const checkConnection = async () => {
-        try {
-          console.log('Vérification de la connexion Supabase...');
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout de connexion')), 5000)
+    const checkCameraPermissions = async () => {
+      try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(
+            (device) => device.kind === "videoinput"
           );
-          
-          const connectionResult = await Promise.race([
-            checkSupabaseConnection(),
-            timeoutPromise
-          ]);
-          
-          if (connectionResult.connected) {
-            setConnectionStatus('connected');
-            setSupabaseError(null);
-          } else {
-            console.warn('Connexion Supabase échouée:', connectionResult.error);
-            setConnectionStatus('disconnected');
-            setSupabaseError(connectionResult.error);
-          }
-        } catch (error) {
-          console.error('Erreur lors de la vérification de connexion:', error);
-          setConnectionStatus('disconnected');
-          setSupabaseError(`Erreur de vérification: ${error.message}`);
+          console.log(`📹 ${videoDevices.length} caméra(s) détectée(s)`);
+          setCameraChecked(true);
         }
-      };
-      
-      const connectionTimer = setTimeout(checkConnection, 100);
-      return () => {
-        clearTimeout(connectionTimer);
-      };
-    }
-  }, [loading]);
+      } catch (err) {
+        console.warn("⚠️ Vérification caméra échouée:", err);
+        setCameraChecked(true);
+      }
+    };
 
-  // CORRECTION: Récupérer les données du dashboard avec gestion d'erreur robuste et fallback
-  const loadDashboardData = async () => {
-    if (!user || !isAuthenticated) {
-      console.log('Aucun utilisateur connecté ou non authentifié, aucune donnée à charger');
+    checkCameraPermissions();
+  }, []);
+
+  // ✅ Chargement données dashboard
+  const loadDashboardData = useCallback(async () => {
+    if (!user) {
       setDashboardData(null);
       return;
     }
 
     try {
       setDashboardLoading(true);
-      setDashboardError(null);
-      console.log('Chargement des données dashboard pour:', user.id);
-      
-      let videos = [];
-      let videosError = null;
 
-      // CORRECTION: Utiliser la même structure de requête que VideoManagement
-      try {
-        const { data: videosData, error: vError } = await supabase
-          .from('videos')
-          .select(`
-            *,
-            transcriptions (*)
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-          
-        if (vError) {
-          console.warn('Erreur avec la table videos:', vError);
-          throw vError;
-        }
-        videos = videosData;
-      } catch (viewError) {
-        // Fallback: utiliser une requête plus simple si la jointure échoue
-        console.warn('Utilisation du fallback vers une requête simple');
-        const { data: videosData, error: vError } = await supabase
-          .from('videos')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-          
-        if (vError) throw vError;
-        videos = videosData;
-      }
+      const { data: videos, error: videosError } = await supabase
+        .from("videos")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-      // Récupération des statistiques globales
-      let stats = null;
-      try {
-        const { data: statsData, error: statsError } = await supabase
-          .rpc('get_user_video_stats', { user_id_param: user.id });
-          
-        if (statsError) {
-          console.warn('Erreur lors de la récupération des statistiques:', statsError);
-        } else {
-          stats = statsData;
-        }
-      } catch (statsError) {
-        console.warn('Exception lors de la récupération des statistiques:', statsError);
-      }
+      if (videosError) throw videosError;
 
-      // CORRECTION: Construction des données pour le dashboard
-      const dashboardData = {
-        totalVideos: videos.length,
-        recentVideos: videos.slice(0, 5),
+      const videoList = videos || [];
+      const stats = {
+        totalVideos: videoList.length,
+        recentVideos: videoList.slice(0, 5),
         videosByStatus: {
-          ready: videos.filter(v => v.status === 'ready' || v.status === 'uploaded' || v.status === 'published').length,
-          processing: videos.filter(v => v.status === 'processing' || v.status === 'analyzing' || v.status === 'transcribing').length,
-          transcribed: videos.filter(v => {
-            // Vérifier selon la struktur de données
-            return v.transcription_text && v.transcription_text.length > 0 || 
-                   (v.transcription_data && Object.keys(v.transcription_data).length > 0);
-          }).length,
-          analyzed: videos.filter(v => {
-            // Vérifier selon la struktur de données
-            return v.analysis_result && Object.keys(v.analysis_result).length > 0 || 
-                   (v.analysis && Object.keys(v.analysis).length > 0) ||
-                   (v.ai_result && v.ai_result.length > 0);
-          }).length,
-          failed: videos.filter(v => v.status === 'failed').length
+          ready: videoList.filter((v) =>
+            ["ready", "uploaded"].includes(v.status)
+          ).length,
+          processing: videoList.filter((v) =>
+            ["processing", "analyzing"].includes(v.status)
+          ).length,
+          analyzed: videoList.filter((v) => v.status === "analyzed").length,
+          failed: videoList.filter((v) =>
+            ["failed", "error"].includes(v.status)
+          ).length,
         },
-        totalDuration: videos.reduce((sum, video) => sum + (video.duration || 0), 0),
-        transcriptionsCount: videos.filter(v => {
-          return v.transcription_text && v.transcription_text.length > 0 || 
-                 (v.transcription_data && Object.keys(v.transcription_data).length > 0);
-        }).length,
-        analysisCount: videos.filter(v => {
-          return v.analysis_result && Object.keys(v.analysis_result).length > 0 || 
-                 (v.analysis && Object.keys(v.analysis).length > 0) ||
-                 (v.ai_result && v.ai_result.length > 0);
-        }).length,
-        videoPerformance: stats?.performance_data || [],
-        progressStats: stats?.progress_stats || { completed: 0, inProgress: 0, totalTime: 0 }
+        totalDuration: videoList.reduce(
+          (sum, video) => sum + (video.duration || 0),
+          0
+        ),
+        transcribedCount: videoList.filter(
+          (v) => v.transcription_data || v.transcription_text
+        ).length,
+        analyzedCount: videoList.filter((v) => v.analysis || v.ai_result)
+          .length,
       };
 
-      setDashboardData(dashboardData);
-      console.log('Données dashboard chargées avec succès:', dashboardData);
-      
+      setDashboardData(stats);
     } catch (err) {
-      console.error('Erreur lors du chargement des données dashboard:', err);
-      setDashboardData(null);
-      setDashboardError(err.message || 'Erreur lors de la récupération des données');
+      console.error("❌ Erreur chargement dashboard:", err);
     } finally {
       setDashboardLoading(false);
     }
-  };
+  }, [user, supabase]);
 
-  // Charger les données du dashboard avec gestion des erreurs
   useEffect(() => {
-    let mounted = true;
-    let dataTimeout = null;
-
-    if (activeTab === 'dashboard' && isAuthenticated) {
-      dataTimeout = setTimeout(() => {
-        if (mounted) {
-          loadDashboardData().catch(err => {
-            console.error('Erreur non gérée lors du chargement des données:', err);
-            if (mounted) {
-              setDashboardError(err.message || 'Erreur inattendue');
-              setDashboardLoading(false);
-            }
-          });
-        }
-      }, 200);
-      
-      let videosChannel = null;
-      if (user && connectionStatus === 'connected') {
-        try {
-          videosChannel = supabase
-            .channel('videos_changes')
-            .on('postgres_changes', 
-              { 
-                event: '*', 
-                schema: 'public', 
-                table: 'videos',
-                filter: `user_id=eq.${user.id}` 
-              }, 
-              payload => {
-                console.log('Changement détecté dans la table videos:', payload);
-                if (mounted) {
-                  loadDashboardData().catch(err => {
-                    console.error('Erreur lors du rechargement après changement:', err);
-                  });
-                }
-              }
-            )
-            .subscribe((status) => {
-              console.log('Statut de souscription aux changements videos:', status);
-            });
-        } catch (err) {
-          console.error('Erreur lors de la configuration du canal realtime:', err);
-        }
-      }
-      
-      return () => {
-        mounted = false;
-        if (dataTimeout) {
-          clearTimeout(dataTimeout);
-        }
-        if (videosChannel) {
-          try {
-            supabase.removeChannel(videosChannel);
-          } catch (err) {
-            console.error('Erreur lors de la suppression du canal:', err);
-          }
-        }
-      };
+    if (user && connectionStatus === "connected") {
+      loadDashboardData();
     }
-  }, [user, activeTab, connectionStatus, isAuthenticated]);
+  }, [user, connectionStatus, loadDashboardData]);
 
-  // CORRECTION: Gestion améliorée du succès d'authentification
-  const handleAuthSuccess = (userData) => {
-    console.log('Utilisateur authentifié avec succès:', userData.id);
-    setIsAuthModalOpen(false);
-    setShowWelcome(false); // Cacher WelcomeAgent après authentification réussie
-    // Attendre que le contexte d'auth soit mis à jour
-    setTimeout(() => {
-      setActiveTab('dashboard');
-      loadDashboardData().catch(err => {
-        console.error('Erreur après authentification:', err);
-      });
-    }, 1000);
-  };
+  // ✅ Gestionnaires d'événements
+  const handleAuthSuccess = useCallback(
+    (userData) => {
+      console.log("✅ Utilisateur authentifié:", userData.id);
+      setIsAuthModalOpen(false);
+      setConnectionStatus("connected");
+      loadDashboardData();
+      navigate("/");
+    },
+    [loadDashboardData, navigate]
+  );
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     try {
-      console.log('Déconnexion demandée');
+      console.log("🚪 Déconnexion utilisateur...");
       await signOut();
       setDashboardData(null);
-      setIsAuthenticated(false);
-      setActiveTab('dashboard');
-      setShowWelcome(true); // Afficher WelcomeAgent après déconnexion
-    } catch (error) {
-      console.error('Erreur de déconnexion:', error);
-      setDashboardData(null);
-      setIsAuthenticated(false);
-      setActiveTab('dashboard');
-      setShowWelcome(true); // Afficher WelcomeAgent en cas d'erreur de déconnexion
+      navigate("/");
+      toast.success("Déconnexion réussie");
+    } catch (err) {
+      console.error("❌ Erreur déconnexion:", err);
+      toast.error("Erreur lors de la déconnexion");
     }
-  };
+  }, [signOut, navigate]);
 
-  const handleRetryConnection = async () => {
-    setConnectionStatus('checking');
+  const handleVideoUploaded = useCallback(() => {
+    console.log("🎥 Vidéo uploadée - rechargement données");
+    loadDashboardData();
+    toast.success("Vidéo traitée avec succès !");
+  }, [loadDashboardData]);
+
+  const handleRetryConnection = useCallback(async () => {
+    setConnectionStatus("checking");
     setSupabaseError(null);
 
     try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout de reconnexion')), 5000)
-      );
-      
-      const connectionResult = await Promise.race([
-        checkSupabaseConnection(),
-        timeoutPromise
-      ]);
-      
-      if (connectionResult.connected) {
-        setConnectionStatus('connected');
-        setSupabaseError(null);
+      const result = await checkSupabaseConnection();
+      if (result.connected) {
+        setConnectionStatus("connected");
+        loadDashboardData();
       } else {
-        setConnectionStatus('disconnected');
-        setSupabaseError(connectionResult.error);
+        setConnectionStatus("disconnected");
+        setSupabaseError(result.error);
       }
-    } catch (error) {
-      setConnectionStatus('disconnected');
-      setSupabaseError(`Erreur de reconnexion: ${error.message}`);
+    } catch (err) {
+      setConnectionStatus("disconnected");
+      setSupabaseError(err.message);
     }
-  };
+  }, [loadDashboardData]);
 
-  // Écran de chargement avec timeout de sécurité
-  useEffect(() => {
-    let safetyTimeout = null;
-    
-    if (loading) {
-      safetyTimeout = setTimeout(() => {
-        console.warn('Timeout de chargement déclenché après 15 secondes');
-        if (loading) {
-          window.location.reload();
-        }
-      }, 15000);
-    }
-    
-    return () => {
-      if (safetyTimeout) {
-        clearTimeout(safetyTimeout);
-      }
-    };
-  }, [loading]);
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  if (supabaseError) {
+  // ✅ Rendu conditionnel des erreurs
+  if (supabaseError && connectionStatus === "disconnected") {
     return (
-      <SupabaseDiagnostic 
-        error={supabaseError} 
+      <SupabaseDiagnostic
+        error={supabaseError}
         onRetry={handleRetryConnection}
         onContinue={() => setSupabaseError(null)}
       />
     );
   }
 
-  // Afficher WelcomeAgent si l'utilisateur n'est pas authentifié
-  if (showWelcome && !isAuthenticated) {
-    return (
-      <div>
-        <WelcomeAgent onOpenAuthModal={() => setIsAuthModalOpen(true)} />
-        <AuthModal 
-          isOpen={isAuthModalOpen} 
-          onClose={() => setIsAuthModalOpen(false)}
-          onSuccess={handleAuthSuccess}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      {/* Header professionnel */}
-      <ProfessionalHeader 
-        user={user} 
-        profile={profile} 
-        connectionStatus={connectionStatus}
-        onSignOut={handleSignOut}
-        onAuthModalOpen={() => setIsAuthModalOpen(true)}
+    <div className="app-container">
+      <Toaster
+        position="top-right"
+        duration={5000}
+        closeButton
+        richColors
+        theme="dark"
       />
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="space-y-6 sm:space-y-8">
-          {/* Tabs modernes */}
-          <ModernTabs activeTab={activeTab} onTabChange={setActiveTab} user={user} />
-          
-          {isAuthenticated ? (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsContent value="dashboard" className="space-y-6">
-                {dashboardLoading ? (
-                  <LoadingScreen 
-                    message="Chargement des données du dashboard..." 
-                    showReloadButton={false}
-                    onCancel={() => {
-                      setDashboardLoading(false);
-                      loadDashboardData();
-                    }}
-                  />
-                ) : dashboardError ? (
-                  <EmptyState 
-                    type="error" 
-                    onAction={() => loadDashboardData()} 
-                    loading={dashboardLoading}
-                  />
-                ) : !dashboardData || (dashboardData.totalVideos === 0) ? (
-                  <EmptyState 
-                    type="dashboard" 
-                    onAction={() => setActiveTab('upload')}
-                  />
-                ) : (
-                  <div className="space-y-6">
-                    <Dashboard data={dashboardData} />
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="videos" className="space-y-6">
-                <VideoManagement />
-              </TabsContent>
-              
-              <TabsContent value="upload" className="space-y-6">
-                <EnhancedVideoUploader />
-              </TabsContent>
-              
-              <TabsContent value="progress" className="space-y-6">
-                <ProgressTracking 
-                  userId={user.id} 
-                  userProfile={profile} 
-                  isVisible={true}
+      <Routes>
+        {/* Route racine intelligente */}
+        <Route
+          path="/"
+          element={
+            user ? (
+              <RequireAuth>
+                <SimplifiedHome
+                  user={user}
+                  profile={profile}
+                  connectionStatus={connectionStatus}
+                  onSignOut={handleSignOut}
+                  dashboardData={dashboardData}
+                  loading={dashboardLoading}
+                  loadDashboardData={loadDashboardData}
                 />
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="text-center py-8 sm:py-12 lg:py-16">
-              <div className="max-w-md mx-auto px-4">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                  <img src="/logo-spotbulle-final.png" alt="SpotBulle AI Logo" className="h-12 w-12 sm:h-16 sm:w-16" />
-                </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3 sm:mb-4">
-                  Bienvenue sur SpotBulle
-                </h2>
-                <p className="text-gray-600 mb-6 sm:mb-8 text-sm sm:text-base">
-                  Plateforme d'analyse IA pour vos pitchs vidéo
-                </p>
-                
-                <div className="space-y-4 sm:space-y-6">
-                  <div className="grid grid-cols-1 gap-3 sm:gap-4 mb-6 sm:mb-8">
-                    <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 sm:p-4 border border-white/20">
-                      <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mx-auto mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm">Upload facile</h3>
-                      <p className="text-xs text-gray-600 mt-1">Téléchargez vos vidéos en quelques clics</p>
-                    </div>
-                    
-                    <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 sm:p-4 border border-white/20">
-                      <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mx-auto mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm">Analyse IA</h3>
-                      <p className="text-xs text-gray-600 mt-1">Obtenez des insights détaillés sur vos pitchs</p>
-                    </div>
-                    
-                    <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 sm:p-4 border border-white/20">
-                      <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mx-auto mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-xs sm:text-sm">Transcription</h3>
-                      <p className="text-xs text-gray-600 mt-1">Transcription automatique de vos vidéos</p>
-                    </div>
-                  </div>
-                  
-                  <Button 
-                    onClick={() => setIsAuthModalOpen(true)}
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl"
-                  >
-                    Commencer maintenant
-                  </Button>
-                </div>
+              </RequireAuth>
+            ) : (
+              <WelcomeAgent
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onDemoMode={() => navigate("/demo")}
+              />
+            )
+          }
+        />
+
+        {/* Routes d'authentification */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/transformation-demo" element={<TransformationDemo />} />
+        <Route path="/psg-signup" element={<PsgSignup />} />
+        <Route path="/psg-signin" element={<PsgSignin />} />
+        <Route path="/test-chat" element={<FootballChatTest />} />
+        <Route path="/premium" element={<SpotBullePremium />} />
+
+        {/* Routes protégées */}
+        <Route
+          path="/record-video"
+          element={
+            <RequireAuth>
+              <EnhancedRecordVideo
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+                onVideoUploaded={handleVideoUploaded}
+                cameraChecked={cameraChecked}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <Dashboard
+                refreshKey={Date.now()}
+                onVideoUploaded={handleVideoUploaded}
+                userProfile={profile}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/video-vault"
+          element={
+            <RequireAuth>
+              <VideoVault
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+                onVideoAdded={handleVideoUploaded}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/video-analysis/:videoId"
+          element={
+            <RequireAuth>
+              <VideoAnalysisPage
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/personality-test"
+          element={
+            <RequireAuth>
+              <FourColorsTest
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/seminars"
+          element={
+            <RequireAuth>
+              <SeminarsList
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/certification"
+          element={
+            <RequireAuth>
+              <Certification
+                user={user}
+                profile={profile}
+                onSignOut={handleSignOut}
+              />
+            </RequireAuth>
+          }
+        />
+
+        {/* Routes de compatibilité */}
+        <Route
+          path="/classic"
+          element={
+            <RequireAuth>
+              <Home
+                user={user}
+                profile={profile}
+                connectionStatus={connectionStatus}
+                onSignOut={handleSignOut}
+                dashboardData={dashboardData}
+                dashboardLoading={dashboardLoading}
+                loadDashboardData={loadDashboardData}
+              />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/video-success"
+          element={
+            <RequireAuth>
+              <VideoSuccess />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/directory"
+          element={
+            <RequireAuth>
+              <Directory />
+            </RequireAuth>
+          }
+        />
+
+        {/* Routes de démonstration */}
+        <Route path="/demo" element={<WelcomeAgent demoMode={true} />} />
+        <Route
+          path="/features"
+          element={<WelcomeAgent showFeatures={true} />}
+        />
+
+        {/* Gestion des erreurs 404 */}
+        <Route
+          path="/404"
+          element={
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+              <div className="text-center text-white">
+                <h1 className="text-6xl font-bold mb-4">404</h1>
+                <p className="text-xl mb-8">Page non trouvée</p>
+                <FallbackButton onClick={() => navigate("/")}>
+                  Retour à l'accueil
+                </FallbackButton>
               </div>
             </div>
-          )}
-        </div>
-      </main>
+          }
+        />
+
+        {/* Redirection catch-all */}
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Routes>
 
       {/* Modal d'authentification */}
-      <AuthModal 
-        isOpen={isAuthModalOpen} 
+      <AuthModal
+        isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={handleAuthSuccess}
+        onAuthSuccess={handleAuthSuccess}
       />
+
+      {/* Service Worker */}
+      <ServiceWorkerRegistration />
     </div>
   );
-}
+};
 
+// ✅ COMPOSANT RACINE
 function App() {
+  console.log("🚀 Initialisation SpotBulle");
+
   return (
-    <AuthProvider>
-      <ErrorBoundaryEnhanced FallbackComponent={SupabaseErrorFallback}>
-        <AppContent />
-      </ErrorBoundaryEnhanced>
-    </AuthProvider>
+    <SessionContextProvider supabaseClient={supabase}>
+      <AuthProvider>
+        <ErrorBoundaryWrapper>
+          <AppContent />
+        </ErrorBoundaryWrapper>
+      </AuthProvider>
+    </SessionContextProvider>
   );
 }
 
