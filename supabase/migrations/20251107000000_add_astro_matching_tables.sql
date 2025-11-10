@@ -3,18 +3,36 @@
 -- 1. Table pour les profils astrologiques
 CREATE TABLE IF NOT EXISTS astro_profiles (
     user_id UUID REFERENCES auth.users(id) PRIMARY KEY,
-    sun_sign VARCHAR(20) NOT NULL,
-    moon_sign VARCHAR(20) NOT NULL,
-    rising_sign VARCHAR(20) NOT NULL,
+    sun_sign VARCHAR(50),
+    moon_sign VARCHAR(50),
+    rising_sign VARCHAR(50),
     planetary_positions JSONB,
+    houses_data JSONB,
     archetype_profile JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    astro_embedding VECTOR(1536),
+    symbolic_profile_text TEXT,
+    symbolic_phrase TEXT,
+    symbolic_archetype TEXT,
+    symbolic_color TEXT,
+    birth_data JSONB,
+    calculation_source VARCHAR(50) DEFAULT 'api',
+    is_mock BOOLEAN DEFAULT false,
+    calculated_at TIMESTAMPTZ,
+    embedding_generated_at TIMESTAMPTZ,
+    symbolic_generated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS pour astro_profiles:
--- Les utilisateurs peuvent voir leur propre profil et ceux des autres (pour le matching)
+-- Supprimer les politiques existantes si elles existent
+DROP POLICY IF EXISTS "Users can view all astro profiles" ON astro_profiles;
+DROP POLICY IF EXISTS "Users can insert their own astro profile" ON astro_profiles;
+DROP POLICY IF EXISTS "Users can update their own astro profile" ON astro_profiles;
+
+-- RLS pour astro_profiles
 ALTER TABLE astro_profiles ENABLE ROW LEVEL SECURITY;
 
+-- Les utilisateurs peuvent voir leur propre profil et ceux des autres (pour le matching)
 CREATE POLICY "Users can view all astro profiles"
 ON astro_profiles FOR SELECT
 USING (true);
@@ -27,56 +45,82 @@ CREATE POLICY "Users can update their own astro profile"
 ON astro_profiles FOR UPDATE
 USING (auth.uid() = user_id);
 
-
 -- 2. Table pour le matching avancé
 CREATE TABLE IF NOT EXISTS advanced_matches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_a_id UUID REFERENCES auth.users(id) NOT NULL,
     user_b_id UUID REFERENCES auth.users(id) NOT NULL,
-    vector_similarity DECIMAL(4,3), -- Pour un matching basé sur des vecteurs (e.g., embeddings)
+    vector_similarity DECIMAL(4,3),
     astro_compatibility DECIMAL(4,3),
     overall_score DECIMAL(4,3) NOT NULL,
+    match_details JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     
-    -- Assurer l'unicité de la paire, indépendamment de l'ordre (A, B) ou (B, A)
     UNIQUE (user_a_id, user_b_id),
     CONSTRAINT check_different_users CHECK (user_a_id <> user_b_id)
 );
 
--- RLS pour advanced_matches:
--- Les utilisateurs peuvent voir les matchs qui les concernent
+-- Supprimer les politiques existantes si elles existent
+DROP POLICY IF EXISTS "Users can view their own matches" ON advanced_matches;
+DROP POLICY IF EXISTS "Matches can be inserted by authenticated users" ON advanced_matches;
+
+-- RLS pour advanced_matches
 ALTER TABLE advanced_matches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own matches"
 ON advanced_matches FOR SELECT
 USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
 
-CREATE POLICY "Matches can be inserted by authenticated users (backend function)"
+CREATE POLICY "Matches can be inserted by authenticated users"
 ON advanced_matches FOR INSERT
-WITH CHECK (auth.role() = 'authenticated'); -- Ou une vérification plus stricte si nécessaire
+WITH CHECK (auth.role() = 'authenticated');
 
--- Création d'index pour accélérer les recherches de matching
-CREATE INDEX idx_advanced_matches_user_a ON advanced_matches (user_a_id);
-CREATE INDEX idx_advanced_matches_user_b ON advanced_matches (user_b_id);
+-- 3. Table pour les recommandations de projets
+CREATE TABLE IF NOT EXISTS project_recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_a_id UUID REFERENCES auth.users(id) NOT NULL,
+    user_b_id UUID REFERENCES auth.users(id) NOT NULL,
+    match_score REAL NOT NULL,
+    recommended_project TEXT NOT NULL,
+    project_description TEXT,
+    reasoning JSONB,
+    category VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE (user_a_id, user_b_id),
+    CONSTRAINT check_different_users_rec CHECK (user_a_id <> user_b_id)
+);
 
--- Amélioration générale: Ajout de colonnes de naissance à la table 'profiles' existante
--- Je suppose qu'une table 'profiles' existe, comme suggéré par le pasted_content.
--- Si la table n'existe pas, cette partie devra être ajustée.
--- Basé sur l'analyse de la structure, il est probable que la table 'profiles' soit gérée par les migrations existantes.
--- Nous allons ajouter les colonnes nécessaires pour le calcul astrologique.
+-- Supprimer les politiques existantes si elles existent
+DROP POLICY IF EXISTS "Users can view their own recommendations" ON project_recommendations;
 
-ALTER TABLE profiles
-ADD COLUMN IF NOT EXISTS birth_date DATE,
-ADD COLUMN IF NOT EXISTS birth_time TIME,
-ADD COLUMN IF NOT EXISTS birth_place VARCHAR(255);
+-- RLS pour project_recommendations
+ALTER TABLE project_recommendations ENABLE ROW LEVEL SECURITY;
 
--- RLS pour la table profiles:
--- Assurer que les utilisateurs peuvent mettre à jour leurs propres données de profil
--- (Ceci est une amélioration de robustesse générale)
--- Nous allons lire les migrations existantes pour voir si une politique RLS est déjà en place.
--- En attendant, nous ajoutons une politique d'UPDATE pour les nouvelles colonnes.
+CREATE POLICY "Users can view their own recommendations"
+ON project_recommendations FOR SELECT
+USING (auth.uid() = user_a_id OR auth.uid() = user_b_id);
 
--- NOTE: Les politiques RLS pour la table 'profiles' sont généralement définies dans les migrations initiales.
--- Nous allons nous concentrer sur l'ajout des colonnes.
+-- 4. Création d'index pour accélérer les recherches
+CREATE INDEX IF NOT EXISTS idx_advanced_matches_user_a ON advanced_matches (user_a_id);
+CREATE INDEX IF NOT EXISTS idx_advanced_matches_user_b ON advanced_matches (user_b_id);
+CREATE INDEX IF NOT EXISTS idx_advanced_matches_score ON advanced_matches (overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_project_recommendations_user_a ON project_recommendations (user_a_id);
+CREATE INDEX IF NOT EXISTS idx_project_recommendations_user_b ON project_recommendations (user_b_id);
+CREATE INDEX IF NOT EXISTS idx_project_recommendations_score ON project_recommendations (match_score DESC);
 
--- Fin de la migration
+-- 5. Ajout des colonnes de naissance à la table profiles existante
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'profiles' AND column_name = 'birth_date') THEN
+        ALTER TABLE profiles ADD COLUMN birth_date DATE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'profiles' AND column_name = 'birth_time') THEN
+        ALTER TABLE profiles ADD COLUMN birth_time TIME;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'profiles' AND column_name
