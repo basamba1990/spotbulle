@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { updateBirthData, getAstroProfile } from "../services/astroService";
-import { useAuth } from "../contexts/AuthContext"; // Supposition d'un contexte d'authentification
+import { useAuth } from "../context/AuthContext"; // ✅ CORRECTION : "../context/AuthContext" au singulier
 
 const BirthDataForm = ({ onProfileUpdated }) => {
   const { user } = useAuth(); // Récupérer l'utilisateur connecté
