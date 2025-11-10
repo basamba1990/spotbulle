@@ -1,4 +1,4 @@
-import { supabase } from "../utils/supabaseClient";
+import { supabase } from "../lib/supabase"; // ✅ CORRECTION : "../lib/supabase" au lieu de "../utils/supabaseClient"
 
 /**
  * Service pour interagir avec le module SpotBulle Challenges.
