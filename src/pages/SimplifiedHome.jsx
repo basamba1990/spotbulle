@@ -16,6 +16,7 @@ import SeminarsList from "../components/SeminarsList.jsx";
 import Certification from "../components/Certification.jsx";
 import ImmersionSimulator from "../components/ImmersionSimulator.jsx";
 import ComplementaryMatches from "../components/ComplementaryMatches.jsx";
+import ChallengeList from "../components/ChallengeList.jsx"; // Import du nouveau composant Challenge
 // ✅ NOUVEAU IMPORT : Sélecteur de langue
 import LanguageSelector from "../components/LanguageSelector.jsx";
 // ✅ NOUVEL IMPORT : Modal de chat football
@@ -24,6 +25,13 @@ import QuickActions from "../components/QuickActions.jsx";
 
 // ✅ Navigation simplifiée complète
 const simplifiedTabs = [
+  {
+    id: "spotcoach",
+    name: "✨ SpotCoach",
+    icon: "✨",
+    priority: 0,
+    description: "Dashboard Avancé et KPI",
+  },
   {
     id: "record",
     name: "🎥 Enregistrer",
@@ -270,6 +278,25 @@ export default function SimplifiedHome({
           </div>
         );
 
+      case "challenges":
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-french font-bold text-white">
+                🏆 SpotBulle Challenges
+              </h2>
+              <Button
+                onClick={() => setActiveSubTab("main")}
+                variant="outline"
+                className="flex items-center gap-2 border-gray-600 text-gray-300 hover:bg-gray-700"
+              >
+                ← Retour
+              </Button>
+            </div>
+            <ChallengeList />
+          </div>
+        );
+
       case "certification":
         return (
           <div className="space-y-6">
@@ -394,6 +421,17 @@ export default function SimplifiedHome({
               </div>
 
               <div
+                onClick={() => setActiveSubTab("challenges")} // Nouveau lien vers les défis
+                className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+              >
+                <div className="text-3xl mb-3">🔥</div>
+                <h3 className="text-xl font-bold mb-2">Challenges</h3>
+                <p className="text-white/90 text-sm">
+                  Participez à des défis vidéo concrets
+                </p>
+              </div>
+
+              <div
                 onClick={() => setActiveSubTab("immersion")}
                 className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
               >
@@ -423,6 +461,17 @@ export default function SimplifiedHome({
                 <h3 className="text-xl font-bold mb-2">Test Personnalité</h3>
                 <p className="text-white/90 text-sm">
                   Découvrez votre profil unique
+                </p>
+              </div>
+
+              <div
+                onClick={() => navigate("/astro-dashboard")} // Lien direct vers la nouvelle page
+                className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+              >
+                <div className="text-3xl mb-3">🪐</div>
+                <h3 className="text-xl font-bold mb-2">Profil Astrologique</h3>
+                <p className="text-white/90 text-sm">
+                  Découvrez votre carte du ciel et votre compatibilité
                 </p>
               </div>
 
@@ -621,12 +670,19 @@ export default function SimplifiedHome({
           </div>
         );
 
-      case "vault":
+      case "spotcoach":
+        return (
+          <div className="space-y-6">
+            <DashboardSpotCoach />
+          </div>
+        );
+
+      case "community":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-french font-bold text-white">
-                📁 Mon Coffre-fort Vidéo
+                👥 Communauté & Synergies
               </h2>
               <Button
                 onClick={() => setActiveTab("record")}
@@ -635,10 +691,10 @@ export default function SimplifiedHome({
                 🎥 Nouvelle Vidéo
               </Button>
             </div>
-            <VideoVault
-              user={user}
-              profile={profile}
-              onSignOut={onSignOut}
+
+            <ComplementaryMatches user={user} profile={profile} />
+          </div>
+        );gnOut={onSignOut}
               onVideoAdded={handleVideoUploaded}
             />
           </div>
