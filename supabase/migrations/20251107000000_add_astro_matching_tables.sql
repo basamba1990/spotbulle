@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_project_recommendations_user_a ON project_recomme
 CREATE INDEX IF NOT EXISTS idx_project_recommendations_user_b ON project_recommendations (user_b_id);
 CREATE INDEX IF NOT EXISTS idx_project_recommendations_score ON project_recommendations (match_score DESC);
 
--- 5. Ajout des colonnes de naissance à la table profiles existante
+-- 5. Ajout des colonnes de naissance à la table profiles existante - CORRECTION SYNTAXE
 DO $$ 
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
@@ -123,4 +123,13 @@ BEGIN
     END IF;
     
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                   WHERE table_name = 'profiles' AND column_name
+                   WHERE table_name = 'profiles' AND column_name = 'birth_place') THEN
+        ALTER TABLE profiles ADD COLUMN birth_place VARCHAR(255);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'profiles' AND column_name = 'birth_data_updated_at') THEN
+        ALTER TABLE profiles ADD COLUMN birth_data_updated_at TIMESTAMPTZ;
+    END IF;
+END $$;
+-- FIN CORRECTE du bloc DO
