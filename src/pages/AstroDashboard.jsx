@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import BirthDataForm from "../components/BirthDataForm";
 import { getAstroProfile, triggerAdvancedMatching, getAdvancedMatches } from "../services/astroService";
-import { useAuth } from "../contexts/AuthContext"; // Supposition d'un contexte d'authentification
-import { Link } from "react-router-dom"; // Supposition de l'utilisation de React Router
+import { useAuth } from "../context/AuthContext"; // ✅ CORRECTION : "context" au singulier
+import { Link } from "react-router-dom";
 
 const AstroDashboard = () => {
   const { user } = useAuth();
@@ -37,8 +37,7 @@ const AstroDashboard = () => {
 
   const handleProfileUpdate = (success) => {
     if (success) {
-      // Recharger les données après la mise à jour
-      setTimeout(fetchAstroData, 3000); // Donner un peu de temps au trigger Supabase
+      setTimeout(fetchAstroData, 3000);
     }
   };
 
@@ -48,7 +47,6 @@ const AstroDashboard = () => {
     try {
       await triggerAdvancedMatching();
       alert("Matching avancé déclenché. Les résultats seront bientôt disponibles.");
-      // Recharger les matchs après le déclenchement
       setTimeout(fetchAstroData, 5000);
     } catch (err) {
       setError(`Erreur lors du déclenchement du matching: ${err.message}`);
@@ -73,7 +71,6 @@ const AstroDashboard = () => {
         <div className="astro-profile-section">
           <h2>Mon Profil Astrologique</h2>
           
-          {/* Fusion Doc_SpotCoach: Affichage du Profil Symbolique GPT-4 */}
           {astroProfile.symbolic_archetype && (
             <div className="symbolic-profile-card bg-gray-800 p-6 rounded-xl shadow-lg border border-white/10 mb-6">
               <div className="flex items-center gap-4 mb-4">
@@ -92,7 +89,6 @@ const AstroDashboard = () => {
             <p><strong>Signe Lunaire:</strong> {astroProfile.moon_sign}</p>
             <p><strong>Ascendant:</strong> {astroProfile.rising_sign}</p>
             <p><strong>Archétype:</strong> {astroProfile.archetype_profile?.dominant_element} / {astroProfile.archetype_profile?.dominant_modality}</p>
-            {/* Afficher plus de détails du profil */}
           </div>
 
           <div className="matching-section">
@@ -108,7 +104,6 @@ const AstroDashboard = () => {
                     <p>Match avec l'utilisateur {match.user_b_id.id} (Score: {match.overall_score})</p>
                     <p>Compatibilité Astro: {match.astro_compatibility}</p>
                     <p>Similarité Vectorielle: {match.vector_similarity}</p>
-                    {/* Lien vers le profil de l'utilisateur matché */}
                     <Link to={`/profile/${match.user_b_id.id}`}>Voir le Profil</Link>
                   </li>
                 ))}
