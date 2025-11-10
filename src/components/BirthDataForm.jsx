@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { updateBirthData, getAstroProfile } from "../services/astroService";
-import { useAuth } from "../context/AuthContext"; // ✅ CORRECTION : "../context/AuthContext" au singulier
+import { useAuth } from "../context/AuthContext";
 
 const BirthDataForm = ({ onProfileUpdated }) => {
-  const { user } = useAuth(); // Récupérer l'utilisateur connecté
+  const { user } = useAuth();
   const [birthData, setBirthData] = useState({
     date: "",
     time: "",
@@ -13,15 +13,23 @@ const BirthDataForm = ({ onProfileUpdated }) => {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    // Pré-remplir le formulaire si le profil astro existe déjà
     const fetchAstroProfile = async () => {
       if (user) {
-        const profile = await getAstroProfile(user.id);
-        if (profile) {
-          // Si le profil existe, on peut supposer que les données de naissance sont dans la table profiles
-          // Pour cet exemple, on ne peut pas les récupérer directement sans un service dédié,
-          // mais en production, on chargerait les données de 'profiles' ici.
-          setMessage("Votre profil astrologique a déjà été calculé.");
+        try {
+          const profile = await getAstroProfile(user.id);
+          if (profile) {
+            setMessage("Votre profil astrologique a déjà été calculé.");
+            // Pré-remplir les données si disponibles
+            if (profile.birth_data) {
+              setBirthData({
+                date: profile.birth_data.birth_date || "",
+                time: profile.birth_data.birth_time || "",
+                place: profile.birth_data.birth_place || "",
+              });
+            }
+          }
+        } catch (error) {
+          console.log("Aucun profil astrologique existant:", error.message);
         }
       }
     };
@@ -42,15 +50,31 @@ const BirthDataForm = ({ onProfileUpdated }) => {
       return;
     }
 
+    // Validation des données
+    if (!birthData.date || !birthData.time || !birthData.place) {
+      setMessage("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
     try {
       await updateBirthData(user.id, birthData);
       setMessage("Données de naissance mises à jour. Calcul astrologique en cours...");
-      if (onProfileUpdated) {
-        onProfileUpdated(true);
-      }
+      
+      // Attendre le calcul astrologique
+      setTimeout(async () => {
+        try {
+          const profile = await getAstroProfile(user.id);
+          if (profile && onProfileUpdated) {
+            onProfileUpdated(true);
+          }
+        } catch (error) {
+          console.error("Erreur récupération profil:", error);
+        }
+      }, 5000);
+      
     } catch (error) {
       setMessage(`Erreur lors de la mise à jour: ${error.message}`);
     } finally {
@@ -92,7 +116,7 @@ const BirthDataForm = ({ onProfileUpdated }) => {
             name="place"
             value={birthData.place}
             onChange={handleChange}
-            placeholder="Ville, Pays"
+            placeholder="Ville, Pays (ex: Paris, France)"
             required
           />
         </div>
