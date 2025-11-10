@@ -207,7 +207,10 @@ BEGIN
     EXECUTE 'CREATE POLICY "Profiles are viewable by everyone" ON public.profiles FOR SELECT USING (TRUE)';
 
     EXECUTE 'DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles';
-    EXECUTE 'CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = user_id)';
+	    EXECUTE 'CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = user_id)';
+
+	    EXECUTE 'DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles';
+	    EXECUTE 'CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = user_id)';
 
     EXECUTE 'DROP POLICY IF EXISTS "Public videos are viewable by everyone" ON public.videos';
     EXECUTE 'CREATE POLICY "Public videos are viewable by everyone" ON public.videos FOR SELECT USING (status=''published'')';
