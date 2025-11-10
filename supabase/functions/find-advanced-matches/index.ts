@@ -5,153 +5,227 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: {
-    persistSession: false,
-  },
+  auth: { persistSession: false },
 });
+
+// Calcul de compatibilité astrologique basé sur les signes réels
+function calculateAstroCompatibility(userAAstro: any, userBAstro: any): number {
+  let compatibility = 0.5; // Score de base
+  
+  // Compatibilité des signes solaires
+  const sunCompatibility = calculateSignCompatibility(userAAstro.sun_sign, userBAstro.sun_sign);
+  compatibility += sunCompatibility * 0.3;
+  
+  // Compatibilité des signes lunaires
+  const moonCompatibility = calculateSignCompatibility(userAAstro.moon_sign, userBAstro.moon_sign);
+  compatibility += moonCompatibility * 0.3;
+  
+  // Compatibilité des ascendants
+  const risingCompatibility = calculateSignCompatibility(userAAstro.rising_sign, userBAstro.rising_sign);
+  compatibility += risingCompatibility * 0.2;
+  
+  // Bonus pour les éléments complémentaires
+  const elementBonus = calculateElementCompatibility(userAAstro.sun_sign, userBAstro.sun_sign);
+  compatibility += elementBonus * 0.2;
+  
+  return Math.min(compatibility, 1.0);
+}
+
+function calculateSignCompatibility(signA: string, signB: string): number {
+  if (signA === signB) return 0.8; // Même signe = bonne compatibilité
+  
+  const compatiblePairs: Record<string, string[]> = {
+    'Bélier': ['Balance', 'Lion', 'Sagittaire'],
+    'Taureau': ['Scorpion', 'Vierge', 'Capricorne'],
+    'Gémeaux': ['Sagittaire', 'Balance', 'Verseau'],
+    'Cancer': ['Capricorne', 'Scorpion', 'Poissons'],
+    'Lion': ['Verseau', 'Balance', 'Sagittaire'],
+    'Vierge': ['Poissons', 'Capricorne', 'Taureau'],
+    'Balance': ['Bélier', 'Lion', 'Gémeaux'],
+    'Scorpion': ['Taureau', 'Cancer', 'Poissons'],
+    'Sagittaire': ['Gémeaux', 'Bélier', 'Lion'],
+    'Capricorne': ['Cancer', 'Taureau', 'Vierge'],
+    'Verseau': ['Lion', 'Gémeaux', 'Balance'],
+    'Poissons': ['Vierge', 'Cancer', 'Scorpion']
+  };
+  
+  return compatiblePairs[signA]?.includes(signB) ? 0.9 : 0.6;
+}
+
+function calculateElementCompatibility(signA: string, signB: string): number {
+  const elements: Record<string, string> = {
+    'Bélier': 'Feu', 'Lion': 'Feu', 'Sagittaire': 'Feu',
+    'Taureau': 'Terre', 'Vierge': 'Terre', 'Capricorne': 'Terre',
+    'Gémeaux': 'Air', 'Balance': 'Air', 'Verseau': 'Air',
+    'Cancer': 'Eau', 'Scorpion': 'Eau', 'Poissons': 'Eau'
+  };
+  
+  const elementA = elements[signA];
+  const elementB = elements[signB];
+  
+  if (!elementA || !elementB) return 0;
+  
+  // Les éléments complémentaires
+  const complementaryPairs: Record<string, string[]> = {
+    'Feu': ['Air', 'Feu'],
+    'Terre': ['Eau', 'Terre'],
+    'Air': ['Feu', 'Air'],
+    'Eau': ['Terre', 'Eau']
+  };
+  
+  return complementaryPairs[elementA]?.includes(elementB) ? 0.2 : 0;
+}
+
+// Calcul de similarité vectorielle réelle
+function calculateVectorSimilarity(embeddingA: number[], embeddingB: number[]): number {
+  if (!embeddingA || !embeddingB || embeddingA.length !== embeddingB.length) {
+    return 0.5; // Fallback si les embeddings sont incompatibles
+  }
+  
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < embeddingA.length; i++) {
+    dotProduct += embeddingA[i] * embeddingB[i];
+    normA += embeddingA[i] * embeddingA[i];
+    normB += embeddingB[i] * embeddingB[i];
+  }
+  
+  normA = Math.sqrt(normA);
+  normB = Math.sqrt(normB);
+  
+  if (normA === 0 || normB === 0) return 0;
+  
+  const cosineSimilarity = dotProduct / (normA * normB);
+  return (cosineSimilarity + 1) / 2; // Normalisation entre 0 et 1
+}
 
 serve(async (req) => {
   try {
     const { user_id } = await req.json();
 
     if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
+      return new Response(JSON.stringify({ error: "User ID manquant" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // 1. Récupérer le profil astrologique de l'utilisateur A
-    const { data: userAstro, error: astroError } = await supabaseAdmin
+    // 1. Récupération du profil astrologique et embedding de l'utilisateur
+    const { data: userAstro, error: userError } = await supabaseAdmin
       .from("astro_profiles")
-      .select("sun_sign, moon_sign, rising_sign, archetype_profile")
+      .select("sun_sign, moon_sign, rising_sign, astro_embedding")
       .eq("user_id", user_id)
       .single();
 
-    if (astroError || !userAstro) {
+    if (userError || !userAstro) {
       return new Response(
-        JSON.stringify({ error: "Astro profile not found for user" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Profil astrologique non trouvé pour l'utilisateur" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
       );
     }
 
-        // 2. Récupérer l'embedding astro de l'utilisateur A
-    const { data: userAEmbedding, error: embedError } = await supabaseAdmin
-      .from("astro_profiles")
-      .select("astro_embedding")
-      .eq("user_id", user_id)
-      .single();
-
-    if (embedError || !userAEmbedding?.astro_embedding) {
-      return new Response(
-        JSON.stringify({ error: "Astro embedding not found for user" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // 3. Trouver des correspondances potentielles en utilisant la similarité vectorielle (pg_vector)
-    // Opérateur de similarité cosinus: <-> (plus le score est bas, plus la similarité est grande)
+    // 2. Recherche des profils potentiels avec similarité vectorielle
+    console.log("🔍 Searching for potential matches...");
+    
     const { data: potentialMatches, error: matchError } = await supabaseAdmin
       .from("astro_profiles")
-      .select("user_id, astro_embedding, sun_sign, moon_sign, rising_sign")
-      .neq("user_id", user_id) // Ne pas se matcher soi-même
-      .order("astro_embedding", {
-        ascending: true,
-        foreignTable: "astro_profiles",
-        nullsFirst: false,
-        distance: userAEmbedding.astro_embedding,
-      })
-      .limit(10); // Limiter pour l'exemple
+      .select("user_id, sun_sign, moon_sign, rising_sign, astro_embedding")
+      .neq("user_id", user_id)
+      .not("astro_embedding", "is", null)
+      .limit(20);
 
     if (matchError) {
-      console.error("Error fetching potential matches:", matchError);
+      console.error("❌ Match search error:", matchError);
       return new Response(
-        JSON.stringify({ error: "Failed to fetch potential matches" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Erreur lors de la recherche de correspondances" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    if (matchError) {
-      console.error("Error fetching potential matches:", matchError);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch potential matches" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-    }
+    console.log(`✅ Found ${potentialMatches.length} potential matches`);
 
     const advancedMatches = [];
 
-    // 3. Calculer la compatibilité et sauvegarder
+    // 3. Calcul des scores pour chaque match potentiel
     for (const match of potentialMatches) {
-      // Calcul de la similarité vectorielle (distance cosinus)
-      // NOTE: La distance cosinus retournée par Supabase est entre 0 et 2.
-      // Nous devons la normaliser pour obtenir un score de similarité entre 0 et 1.
-      // Pour l'exemple, nous allons simuler un score basé sur la distance.
-      const distance = 1 - Math.abs(Math.random() - 0.5) * 2; // Simule une distance entre 0 et 1
-      const vectorSimilarity = 1 - distance; // Similarité entre 0 et 1 (1 = parfait match)
+      // Similarité vectorielle
+      const vectorSimilarity = calculateVectorSimilarity(
+        userAstro.astro_embedding,
+        match.astro_embedding
+      );
 
-      // SIMULATION du calcul de compatibilité astrologique (basé sur les signes)
-      const isCompatibleSign = userAstro.sun_sign === match.sun_sign;
-      const astroCompatibility = isCompatibleSign ? 8.5 : Math.random() * 5; // Score entre 0 et 10
+      // Compatibilité astrologique
+      const astroCompatibility = calculateAstroCompatibility(userAstro, match);
 
-      // Calcul du score global (pondération)
-      const overallScore = (astroCompatibility * 0.5 + vectorSimilarity * 5) / 10; // Pondération
+      // Score global pondéré
+      const overallScore = (
+        (vectorSimilarity * 0.6) +      // 60% similarité vectorielle
+        (astroCompatibility * 0.4)      // 40% compatibilité astro
+      );
 
-      const { error: insertError } = await supabaseAdmin
-        .from("advanced_matches")
-        .upsert(
-          {
-            user_a_id: user_id,
-            user_b_id: match.user_id,
-            vector_similarity: parseFloat(vectorSimilarity.toFixed(3)),
-            astro_compatibility: parseFloat(astroCompatibility.toFixed(3)),
-            overall_score: parseFloat(overallScore.toFixed(3)),
-            // Connexion avec les profils vidéo existants:
-            // Ici, on pourrait ajouter une étape pour récupérer l'embedding vidéo
-            // de l'utilisateur B et calculer une similarité vidéo, mais nous
-            // nous concentrons sur l'embedding astro pour le matching initial.
-          },
-          { onConflict: ["user_a_id", "user_b_id"] }
-        );
+      // Seuil minimum pour considérer un match
+      if (overallScore >= 0.6) {
+        const matchData = {
+          user_a_id: user_id,
+          user_b_id: match.user_id,
+          vector_similarity: parseFloat(vectorSimilarity.toFixed(3)),
+          astro_compatibility: parseFloat(astroCompatibility.toFixed(3)),
+          overall_score: parseFloat(overallScore.toFixed(3)),
+          match_details: {
+            sun_sign_compatibility: calculateSignCompatibility(userAstro.sun_sign, match.sun_sign),
+            moon_sign_compatibility: calculateSignCompatibility(userAstro.moon_sign, match.moon_sign),
+            element_compatibility: calculateElementCompatibility(userAstro.sun_sign, match.sun_sign)
+          }
+        };
 
-      if (insertError) {
-        console.error("Error saving match:", insertError);
-        // Continuer malgré l'erreur pour les autres matchs
+        // Sauvegarde du match
+        const { error: insertError } = await supabaseAdmin
+          .from("advanced_matches")
+          .upsert(matchData, { onConflict: ["user_a_id", "user_b_id"] });
+
+        if (insertError) {
+          console.error("❌ Error saving match:", insertError);
+          continue;
+        }
+
+        advancedMatches.push({
+          match_id: match.user_id,
+          overall_score: matchData.overall_score,
+          vector_similarity: matchData.vector_similarity,
+          astro_compatibility: matchData.astro_compatibility
+        });
       }
+    }
 
-      advancedMatches.push({
-        match_id: match.user_id,
-        overall_score: parseFloat(overallScore.toFixed(3)),
+    console.log(`🎯 Generated ${advancedMatches.length} advanced matches`);
+
+    // 4. Déclenchement des recommandations de projets
+    try {
+      await supabaseAdmin.functions.invoke("generate-project-recommendations", {
+        body: { user_id }
       });
+    } catch (recError) {
+      console.log("⚠️ Project recommendations skipped:", recError.message);
     }
 
     return new Response(
       JSON.stringify({
-        message: "Advanced matching completed and results saved",
-        matches: advancedMatches,
+        message: "Matching avancé complété avec succès",
+        matches_generated: advancedMatches.length,
+        matches: advancedMatches.sort((a, b) => b.overall_score - a.overall_score)
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { "Content-Type": "application/json" } }
     );
+
   } catch (error) {
-    console.error("General error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error("❌ General error in find-advanced-matches:", error);
+    return new Response(
+      JSON.stringify({ 
+        error: `Erreur lors du matching avancé: ${error.message}` 
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 });
