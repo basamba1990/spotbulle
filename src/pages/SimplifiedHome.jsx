@@ -673,16 +673,30 @@ export default function SimplifiedHome({
       case "spotcoach":
         return (
           <div className="space-y-6">
-            <DashboardSpotCoach />
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">✨</div>
+              <h3 className="text-2xl font-bold text-white mb-4">
+                SpotCoach - Dashboard Avancé
+              </h3>
+              <p className="text-gray-300 mb-6">
+                Fonctionnalité en cours de développement...
+              </p>
+              <Button
+                onClick={() => setActiveTab("dashboard")}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                📊 Aller au Tableau de Bord
+              </Button>
+            </div>
           </div>
         );
 
-      case "community":
+      case "vault":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-french font-bold text-white">
-                👥 Communauté & Synergies
+                📁 Mes Vidéos
               </h2>
               <Button
                 onClick={() => setActiveTab("record")}
@@ -691,10 +705,10 @@ export default function SimplifiedHome({
                 🎥 Nouvelle Vidéo
               </Button>
             </div>
-
-            <ComplementaryMatches user={user} profile={profile} />
-          </div>
-        );gnOut={onSignOut}
+            <VideoVault
+              user={user}
+              profile={profile}
+              onSignOut={onSignOut}
               onVideoAdded={handleVideoUploaded}
             />
           </div>
@@ -803,7 +817,7 @@ export default function SimplifiedHome({
           <div className="mb-6 p-4 bg-red-900/30 border border-red-700 rounded-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 text-red-400" />
+                <div className="h-5 w-5 text-red-400">⚠️</div>
                 <div>
                   <h4 className="font-semibold text-red-300">Erreur</h4>
                   <p className="text-red-200 text-sm mt-1">
