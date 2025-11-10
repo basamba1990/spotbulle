@@ -61,8 +61,8 @@ allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm"]
 
 [auth]
 enabled = true
-site_url = "https://spotbulle.vercel.app/"
-additional_redirect_urls = ["https://spotbulle.vercel.app/*"]
+site_url = "https://spotbulle-premium.vercel.app/"
+additional_redirect_urls = ["https://spotbulle-premium.vercel.app/*"]
 jwt_expiry = 604800
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
