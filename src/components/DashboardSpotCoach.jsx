@@ -22,48 +22,60 @@ const DashboardSpotCoach = () => {
   const [error, setError] = useState(null);
   const [astroProfile, setAstroProfile] = useState(null);
 
-  useEffect(() => {
-    const fetchSpotCoachData = async () => {
-      if (!user) return;
-      
-      setLoading(true);
-      setError(null);
+  const loadSpotCoachData = async () => {
+    if (!user) {
+      setError("Utilisateur non connecté");
+      setLoading(false);
+      return;
+    }
 
+    console.log("🔄 Loading SpotCoach data for user:", user.id);
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Charger le profil astrologique avec gestion d'erreur robuste
+      let astroData = null;
       try {
-        console.log("🔄 Loading SpotCoach data for user:", user.id);
-
-        // 1. Récupérer le profil astrologique
-        const { data: astroData, error: astroError } = await supabase
+        const { data, error: astroError } = await supabase
           .from("astro_profiles")
           .select("*")
           .eq("user_id", user.id)
-          .single();
+          .maybeSingle();
 
         if (astroError) {
-          console.warn("Astro profile not found:", astroError.message);
-          setAstroProfile(null);
+          console.warn("⚠️ Astro profile load warning:", astroError.message);
         } else {
-          console.log("✅ Astro profile loaded:", astroData);
-          setAstroProfile(astroData);
+          astroData = data;
+          setAstroProfile(data);
+          console.log("✅ Astro profile loaded:", data ? "Yes" : "No");
         }
+      } catch (astroErr) {
+        console.warn("⚠️ Astro profile load failed:", astroErr.message);
+      }
 
-        // 2. Récupérer les statistiques vidéo de base
+      // 2. Charger les statistiques vidéo
+      let videoStats = { totalVideos: 0, totalDuration: 0, analyzedVideos: 0 };
+      try {
         const { data: videos, error: videosError } = await supabase
           .from("videos")
           .select("id, duration, status, created_at")
           .eq("user_id", user.id);
 
-        if (videosError) {
-          console.warn("Videos stats error:", videosError.message);
+        if (!videosError && videos) {
+          videoStats = {
+            totalVideos: videos.length,
+            totalDuration: videos.reduce((sum, video) => sum + (video.duration || 0), 0),
+            analyzedVideos: videos.filter(v => v.status === 'analyzed').length
+          };
         }
+      } catch (videoErr) {
+        console.warn("⚠️ Video stats load failed:", videoErr.message);
+      }
 
-        const videoStats = {
-          totalVideos: videos?.length || 0,
-          totalDuration: videos?.reduce((sum, video) => sum + (video.duration || 0), 0) || 0,
-          analyzedVideos: videos?.filter(v => v.status === 'analyzed').length || 0
-        };
-
-        // 3. Récupérer les matches
+      // 3. Charger les matches
+      let bestMatchScore = 0;
+      try {
         const { data: matches, error: matchesError } = await supabase
           .from("advanced_matches")
           .select("overall_score")
@@ -71,57 +83,71 @@ const DashboardSpotCoach = () => {
           .order("overall_score", { ascending: false })
           .limit(1);
 
-        const bestMatchScore = matches?.[0]?.overall_score || 0;
+        if (!matchesError && matches && matches.length > 0) {
+          bestMatchScore = matches[0].overall_score;
+        }
+      } catch (matchErr) {
+        console.warn("⚠️ Matches load failed:", matchErr.message);
+      }
 
-        // 4. Calculer le SpotCoach Score
-        const performanceScore = videoStats.totalVideos > 0 
-          ? (videoStats.totalDuration / 60) * 0.3 + (videoStats.analyzedVideos * 0.7) 
-          : 0;
-        
-        const spotCoachScore = Math.min(100, Math.round(
-          performanceScore * 8 + bestMatchScore * 20
-        ));
-
-        // 5. Récupérer les recommandations
-        const { data: projectRecs, error: recError } = await supabase
+      // 4. Charger les recommandations
+      let projectRecs = [];
+      try {
+        const { data: recs, error: recError } = await supabase
           .from("project_recommendations")
           .select("*, user_b_id:profiles!project_recommendations_user_b_id_fkey(full_name)")
           .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
           .order("match_score", { ascending: false })
           .limit(3);
 
-        if (!recError && projectRecs) {
-          setRecommendations(projectRecs);
+        if (!recError && recs) {
+          projectRecs = recs;
         }
-
-        // 6. Préparer les stats finales
-        const finalStats = {
-          spotCoachScore: spotCoachScore,
-          bestMatchScore: (bestMatchScore * 10).toFixed(1),
-          astroSign: astroData?.sun_sign || "Non défini",
-          archetype: astroData?.symbolic_archetype || astroData?.archetype_profile?.dominant_element || "N/A",
-          totalVideos: videoStats.totalVideos,
-          totalDuration: videoStats.totalDuration,
-          analyzedVideos: videoStats.analyzedVideos,
-          symbolicColor: astroData?.symbolic_color || "#6366F1"
-        };
-
-        console.log("📊 Final stats:", finalStats);
-        setStats(finalStats);
-
-      } catch (err) {
-        console.error("❌ Error loading SpotCoach data:", err);
-        setError("Erreur lors du chargement des données SpotCoach");
-        toast.error("Impossible de charger le dashboard avancé");
-      } finally {
-        setLoading(false);
+        setRecommendations(projectRecs);
+      } catch (recErr) {
+        console.warn("⚠️ Recommendations load failed:", recErr.message);
       }
-    };
 
-    fetchSpotCoachData();
+      // 5. Calculer le SpotCoach Score (avec fallback)
+      const performanceScore = videoStats.totalVideos > 0 
+        ? (videoStats.totalDuration / 60) * 0.3 + (videoStats.analyzedVideos * 0.7) 
+        : 0;
+      
+      const spotCoachScore = Math.min(100, Math.round(
+        performanceScore * 8 + bestMatchScore * 20
+      ));
+
+      // 6. Préparer les stats finales avec fallbacks
+      const finalStats = {
+        spotCoachScore: spotCoachScore,
+        bestMatchScore: (bestMatchScore * 10).toFixed(1),
+        astroSign: astroData?.sun_sign || "Non défini",
+        archetype: astroData?.symbolic_archetype || astroData?.archetype_profile?.dominant_element || "N/A",
+        totalVideos: videoStats.totalVideos,
+        totalDuration: videoStats.totalDuration,
+        analyzedVideos: videoStats.analyzedVideos,
+        symbolicColor: astroData?.symbolic_color || "#6366F1",
+        hasAstroProfile: !!astroData
+      };
+
+      console.log("📊 Final stats calculated:", finalStats);
+      setStats(finalStats);
+
+    } catch (err) {
+      console.error("❌ Critical error loading SpotCoach:", err);
+      setError("Erreur critique lors du chargement des données");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSpotCoachData();
   }, [user]);
 
   const handleGenerateRecommendations = async () => {
+    if (!user) return;
+    
     try {
       toast.loading("Génération des recommandations...");
       
@@ -133,11 +159,50 @@ const DashboardSpotCoach = () => {
 
       toast.success("Recommandations générées avec succès !");
       
-      // Recharger les données
-      setTimeout(() => window.location.reload(), 2000);
+      // Recharger les données après un délai
+      setTimeout(() => {
+        loadSpotCoachData();
+      }, 3000);
     } catch (err) {
       console.error("❌ Error generating recommendations:", err);
       toast.error("Erreur lors de la génération des recommandations");
+    }
+  };
+
+  const handleCalculateAstroProfile = async () => {
+    if (!user) return;
+    
+    try {
+      toast.loading("Calcul du profil astrologique...");
+      
+      // Vérifier d'abord si l'utilisateur a des données de naissance
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("birth_date, birth_time, birth_place")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile.birth_date || !profile.birth_time || !profile.birth_place) {
+        toast.error("Veuillez d'abord compléter vos données de naissance");
+        window.location.href = '/astro-dashboard';
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("calculate-astro-profile", {
+        body: { user_id: user.id }
+      });
+
+      if (error) throw error;
+
+      toast.success("Profil astrologique calculé avec succès !");
+      
+      // Recharger les données
+      setTimeout(() => {
+        loadSpotCoachData();
+      }, 5000);
+    } catch (err) {
+      console.error("❌ Error calculating astro profile:", err);
+      toast.error("Erreur lors du calcul du profil astrologique");
     }
   };
 
@@ -158,10 +223,16 @@ const DashboardSpotCoach = () => {
           <h3 className="text-red-300 text-lg font-semibold mb-2">Erreur de chargement</h3>
           <p className="text-red-200 mb-4">{error}</p>
           <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            onClick={loadSpotCoachData}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 mr-2"
           >
             Réessayer
+          </button>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+          >
+            Aller au Dashboard
           </button>
         </div>
       </div>
@@ -173,16 +244,24 @@ const DashboardSpotCoach = () => {
       <div className="text-center p-8">
         <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-6 max-w-md mx-auto">
           <div className="text-yellow-400 text-4xl mb-4">📊</div>
-          <h3 className="text-yellow-300 text-lg font-semibold mb-2">Données indisponibles</h3>
+          <h3 className="text-yellow-300 text-lg font-semibold mb-2">Dashboard SpotCoach</h3>
           <p className="text-yellow-200 mb-4">
-            Complétez votre profil astrologique et analysez vos vidéos pour débloquer le SpotCoach.
+            Analyse avancée de vos performances et compatibilités
           </p>
-          <button
-            onClick={() => window.location.href = '/astro-dashboard'}
-            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
-          >
-            🪐 Aller au Profil Astro
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => window.location.href = '/astro-dashboard'}
+              className="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+            >
+              🪐 Configurer Profil Astro
+            </button>
+            <button
+              onClick={() => window.location.href = '/record-video'}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              🎥 Créer une Vidéo
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -195,6 +274,15 @@ const DashboardSpotCoach = () => {
           Dashboard SpotCoach Avancé
         </h1>
         <div className="flex gap-2">
+          {!stats.hasAstroProfile && (
+            <button
+              onClick={handleCalculateAstroProfile}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <BoltIcon className="h-5 w-5" />
+              Calculer Profil Astro
+            </button>
+          )}
           <button
             onClick={handleGenerateRecommendations}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
@@ -233,6 +321,27 @@ const DashboardSpotCoach = () => {
         />
       </div>
 
+      {/* Message si pas de profil astro */}
+      {!stats.hasAstroProfile && (
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="text-blue-400 text-xl">🪐</div>
+            <div>
+              <h3 className="text-blue-300 font-semibold">Profil Astrologique Manquant</h3>
+              <p className="text-blue-200 text-sm">
+                Complétez votre profil astrologique pour débloquer l'analyse avancée des compatibilités.
+              </p>
+            </div>
+            <button
+              onClick={() => window.location.href = '/astro-dashboard'}
+              className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            >
+              Configurer
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Profil Symbolique */}
       {astroProfile?.symbolic_archetype && (
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-xl border border-gray-700">
@@ -252,9 +361,11 @@ const DashboardSpotCoach = () => {
                 "{astroProfile.symbolic_phrase}"
               </p>
             </div>
-            <p className="text-gray-300 leading-relaxed">
-              {astroProfile.symbolic_profile_text}
-            </p>
+            {astroProfile.symbolic_profile_text && (
+              <p className="text-gray-300 leading-relaxed">
+                {astroProfile.symbolic_profile_text}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -304,13 +415,16 @@ const DashboardSpotCoach = () => {
           <div className="text-center py-8">
             <div className="text-gray-400 text-4xl mb-4">💡</div>
             <p className="text-gray-300 mb-4">
-              Aucune recommandation disponible. Générez des recommandations basées sur votre profil.
+              {stats.hasAstroProfile 
+                ? "Générez vos premières recommandations basées sur votre profil"
+                : "Complétez votre profil astrologique pour générer des recommandations"
+              }
             </p>
             <button
-              onClick={handleGenerateRecommendations}
+              onClick={stats.hasAstroProfile ? handleGenerateRecommendations : () => window.location.href = '/astro-dashboard'}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
             >
-              Générer mes premières recommandations
+              {stats.hasAstroProfile ? "Générer des recommandations" : "Configurer le profil astro"}
             </button>
           </div>
         )}
