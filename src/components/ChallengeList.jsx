@@ -1,6 +1,5 @@
-// src/components/ChallengeList.jsx
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext'; // ✅ CORRECTION : "../context" au lieu de "../contexts"
+import { useAuth } from '../context/AuthContext'; // ✅ CORRECTION : "../context" au singulier
 import { getChallenges, submitChallenge, getUserVideosForChallenges } from '../services/challengeService';
 import { toast } from 'sonner';
 import { Button } from './ui/button-enhanced.jsx';
