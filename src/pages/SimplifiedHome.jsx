@@ -8,22 +8,20 @@ import VideoVault from "./video-vault.jsx";
 import { Button } from "../components/ui/button-enhanced.jsx";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useSupabaseClient } from "@supabase/auth-helpers-react";
+import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 
-// ✅ AJOUT DES IMPORTS MANQUANTS
+// ✅ IMPORTS COMPLETS
 import Questionnaire from "../components/Questionnaire.jsx";
 import SeminarsList from "../components/SeminarsList.jsx";
 import Certification from "../components/Certification.jsx";
 import ImmersionSimulator from "../components/ImmersionSimulator.jsx";
 import ComplementaryMatches from "../components/ComplementaryMatches.jsx";
-import ChallengeList from "../components/ChallengeList.jsx"; // Import du nouveau composant Challenge
-// ✅ NOUVEAU IMPORT : Sélecteur de langue
+import ChallengeList from "../components/ChallengeList.jsx"; // ✅ IMPORT CORRECT
 import LanguageSelector from "../components/LanguageSelector.jsx";
-// ✅ NOUVEL IMPORT : Modal de chat football
 import FootballChatModal from "../components/FootballChatModal.jsx";
 import QuickActions from "../components/QuickActions.jsx";
 
-// ✅ Navigation simplifiée complète
+// ✅ NAVIGATION SIMPLIFIÉE AVEC CHALLENGES INTÉGRÉ
 const simplifiedTabs = [
   {
     id: "spotcoach",
@@ -61,17 +59,24 @@ const simplifiedTabs = [
     description: "Gérer mon compte",
   },
   {
+    id: "challenges",
+    name: "🏆 Challenges",
+    icon: "🏆",
+    priority: 5,
+    description: "Participer aux défis",
+  },
+  {
     id: "community",
     name: "👥 Communauté",
     icon: "👥",
-    priority: 5,
+    priority: 6,
     description: "Trouver des synergies",
   },
   {
     id: "more",
     name: "➕ Plus",
     icon: "➕",
-    priority: 6,
+    priority: 7,
     description: "Autres fonctionnalités",
   },
 ];
@@ -92,19 +97,17 @@ export default function SimplifiedHome({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [userStats, setUserStats] = useState(null);
-  const [activeSubTab, setActiveSubTab] = useState("main"); // Pour l'onglet "Plus"
+  const [activeSubTab, setActiveSubTab] = useState("main");
   const [activeImmersionTab, setActiveImmersionTab] = useState("parcours");
-  // ✅ NOUVEL ÉTAT : Langue sélectionnée
   const [selectedLanguage, setSelectedLanguage] = useState(null);
   const [appError, setAppError] = useState(null);
-  // ✅ NOUVEL ÉTAT : Modal de chat football
   const [showChatModal, setShowChatModal] = useState(false);
-  // ✅ NOUVEL ÉTAT : Affichage sélecteur de langue
   const [showLanguageOptions, setShowLanguageOptions] = useState(false);
 
   const supabase = useSupabaseClient();
+  const currentUser = useUser();
 
-  // ✅ Chargement des statistiques utilisateur
+  // ✅ CHARGEMENT DES STATISTIQUES UTILISATEUR
   useEffect(() => {
     const loadUserStats = async () => {
       if (!user) return;
@@ -112,7 +115,7 @@ export default function SimplifiedHome({
       try {
         const { data: videos, error } = await supabase
           .from("videos")
-          .select("id, status, created_at, title")
+          .select("id, status, created_at, title, duration")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
@@ -121,12 +124,13 @@ export default function SimplifiedHome({
         const stats = {
           totalVideos: videos?.length || 0,
           recentVideos: videos?.slice(0, 3) || [],
-          completedVideos:
-            videos?.filter((v) => v.status === "analyzed").length || 0,
-          processingVideos:
-            videos?.filter(
-              (v) => v.status === "processing" || v.status === "analyzing"
-            ).length || 0,
+          completedVideos: videos?.filter((v) => 
+            v.status === "analyzed" || v.status === "published" || v.status === "completed"
+          ).length || 0,
+          processingVideos: videos?.filter((v) => 
+            v.status === "processing" || v.status === "analyzing" || v.status === "uploading"
+          ).length || 0,
+          totalDuration: videos?.reduce((total, video) => total + (video.duration || 0), 0) || 0,
         };
 
         setUserStats(stats);
@@ -139,6 +143,7 @@ export default function SimplifiedHome({
     loadUserStats();
   }, [user, supabase, refreshKey]);
 
+  // ✅ GESTIONNAIRES D'ÉVÉNEMENTS
   const handleVideoUploaded = () => {
     console.log("🔄 Vidéo uploadée, rechargement des données");
     setRefreshKey((prev) => prev + 1);
@@ -158,24 +163,19 @@ export default function SimplifiedHome({
 
   const handleQuestionnaireComplete = () => {
     setShowQuestionnaire(false);
-    toast.success(
-      "Questionnaire complété ! Votre profil est maintenant enrichi."
-    );
+    toast.success("Questionnaire complété ! Votre profil est maintenant enrichi.");
     if (loadDashboardData) {
       loadDashboardData();
     }
   };
 
-  // ✅ CORRECTION : Gestionnaire de changement de langue amélioré
   const handleLanguageChange = (languageCode) => {
     setSelectedLanguage(languageCode);
     console.log("🌐 Langue sélectionnée pour transcription:", languageCode);
-    toast.success(
-      `Langue sélectionnée: ${languageCode || "Détection automatique"}`
-    );
+    toast.success(`Langue sélectionnée: ${languageCode || "Détection automatique"}`);
   };
 
-  // ✅ Scénarios d'enregistrement
+  // ✅ SCÉNARIOS D'ENREGISTREMENT
   const recordingScenarios = {
     enfants: [
       "🎙 Dis-moi pourquoi tu aimes ton sport préféré.",
@@ -195,47 +195,65 @@ export default function SimplifiedHome({
     ],
   };
 
-  // ✅ Navigation par actions rapides via composant dédié
+  // ✅ NAVIGATION PAR ACTIONS RAPIDES
   const onSelectQuickAction = (id) => {
     setActiveTab(id);
     if (id === "more") setActiveSubTab("main");
   };
 
-  // ✅ Statistiques rapides
+  // ✅ STATISTIQUES RAPIDES AMÉLIORÉES
   const renderQuickStats = () => {
     if (!userStats || userStats.totalVideos === 0) return null;
 
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         <div className="bg-blue-900/30 rounded-lg p-4 text-center border border-blue-700">
-          <div className="text-2xl font-bold text-white">
-            {userStats.totalVideos}
-          </div>
+          <div className="text-2xl font-bold text-white">{userStats.totalVideos}</div>
           <div className="text-blue-300 text-sm">Total Vidéos</div>
         </div>
         <div className="bg-green-900/30 rounded-lg p-4 text-center border border-green-700">
-          <div className="text-2xl font-bold text-white">
-            {userStats.completedVideos}
-          </div>
+          <div className="text-2xl font-bold text-white">{userStats.completedVideos}</div>
           <div className="text-green-300 text-sm">Analysées</div>
         </div>
         <div className="bg-purple-900/30 rounded-lg p-4 text-center border border-purple-700">
-          <div className="text-2xl font-bold text-white">
-            {userStats.recentVideos.length}
-          </div>
+          <div className="text-2xl font-bold text-white">{userStats.recentVideos.length}</div>
           <div className="text-purple-300 text-sm">Récentes</div>
         </div>
         <div className="bg-yellow-900/30 rounded-lg p-4 text-center border border-yellow-700">
-          <div className="text-2xl font-bold text-white">
-            {userStats.processingVideos}
-          </div>
+          <div className="text-2xl font-bold text-white">{userStats.processingVideos}</div>
           <div className="text-yellow-300 text-sm">En traitement</div>
+        </div>
+        <div className="bg-cyan-900/30 rounded-lg p-4 text-center border border-cyan-700">
+          <div className="text-2xl font-bold text-white">
+            {Math.round(userStats.totalDuration / 60)} min
+          </div>
+          <div className="text-cyan-300 text-sm">Durée totale</div>
         </div>
       </div>
     );
   };
 
-  // ✅ Contenu de l'onglet "Community"
+  // ✅ CONTENU DE L'ONGLET CHALLENGES (NOUVEAU)
+  const renderChallengesContent = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-french font-bold text-white">
+            🏆 SpotBulle Challenges
+          </h2>
+          <Button
+            onClick={() => setActiveTab("record")}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            🎥 Nouvelle Vidéo
+          </Button>
+        </div>
+        <ChallengeList />
+      </div>
+    );
+  };
+
+  // ✅ CONTENU DE L'ONGLET COMMUNITY
   const renderCommunityContent = () => {
     return (
       <div className="space-y-6">
@@ -250,13 +268,12 @@ export default function SimplifiedHome({
             🎥 Nouvelle Vidéo
           </Button>
         </div>
-
         <ComplementaryMatches user={user} profile={profile} />
       </div>
     );
   };
 
-  // ✅ Contenu de l'onglet "Plus"
+  // ✅ CONTENU DE L'ONGLET "PLUS" SIMPLIFIÉ
   const renderMoreContent = () => {
     switch (activeSubTab) {
       case "seminars":
@@ -278,25 +295,6 @@ export default function SimplifiedHome({
           </div>
         );
 
-      case "challenges":
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🏆 SpotBulle Challenges
-              </h2>
-              <Button
-                onClick={() => setActiveSubTab("main")}
-                variant="outline"
-                className="flex items-center gap-2 border-gray-600 text-gray-300 hover:bg-gray-700"
-              >
-                ← Retour
-              </Button>
-            </div>
-            <ChallengeList />
-          </div>
-        );
-
       case "certification":
         return (
           <div className="space-y-6">
@@ -312,11 +310,7 @@ export default function SimplifiedHome({
                 ← Retour
               </Button>
             </div>
-            <Certification
-              user={user}
-              profile={profile}
-              onSignOut={onSignOut}
-            />
+            <Certification user={user} profile={profile} onSignOut={onSignOut} />
           </div>
         );
 
@@ -329,18 +323,14 @@ export default function SimplifiedHome({
               </h2>
               <div className="flex gap-2">
                 <Button
-                  variant={
-                    activeImmersionTab === "parcours" ? "default" : "outline"
-                  }
+                  variant={activeImmersionTab === "parcours" ? "default" : "outline"}
                   onClick={() => setActiveImmersionTab("parcours")}
                   className="btn-spotbulle-dark"
                 >
                   🧭 Parcours
                 </Button>
                 <Button
-                  variant={
-                    activeImmersionTab === "scenarios" ? "default" : "outline"
-                  }
+                  variant={activeImmersionTab === "scenarios" ? "default" : "outline"}
                   onClick={() => setActiveImmersionTab("scenarios")}
                   className="btn-spotbulle-dark"
                 >
@@ -359,7 +349,7 @@ export default function SimplifiedHome({
           </div>
         );
 
-      case "language": // ✅ NOUVEAU SOUS-ONGLET : Sélection de langue
+      case "language":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -421,17 +411,6 @@ export default function SimplifiedHome({
               </div>
 
               <div
-                onClick={() => setActiveSubTab("challenges")} // Nouveau lien vers les défis
-                className="bg-gradient-to-br from-red-600 to-red-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                <div className="text-3xl mb-3">🔥</div>
-                <h3 className="text-xl font-bold mb-2">Challenges</h3>
-                <p className="text-white/90 text-sm">
-                  Participez à des défis vidéo concrets
-                </p>
-              </div>
-
-              <div
                 onClick={() => setActiveSubTab("immersion")}
                 className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
               >
@@ -443,13 +422,24 @@ export default function SimplifiedHome({
               </div>
 
               <div
-                onClick={() => setActiveTab("community")}
-                className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                onClick={() => navigate("/astro-dashboard")}
+                className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
               >
-                <div className="text-3xl mb-3">👥</div>
-                <h3 className="text-xl font-bold mb-2">Communauté</h3>
+                <div className="text-3xl mb-3">🪐</div>
+                <h3 className="text-xl font-bold mb-2">Profil Astrologique</h3>
                 <p className="text-white/90 text-sm">
-                  Rencontrez d'autres passionnés
+                  Découvrez votre carte du ciel et votre compatibilité
+                </p>
+              </div>
+
+              <div
+                onClick={() => setActiveSubTab("language")}
+                className="bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+              >
+                <div className="text-3xl mb-3">🌐</div>
+                <h3 className="text-xl font-bold mb-2">Langues</h3>
+                <p className="text-white/90 text-sm">
+                  Sélectionnez votre langue de transcription
                 </p>
               </div>
 
@@ -463,35 +453,13 @@ export default function SimplifiedHome({
                   Découvrez votre profil unique
                 </p>
               </div>
-
-              <div
-                onClick={() => navigate("/astro-dashboard")} // Lien direct vers la nouvelle page
-                className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                <div className="text-3xl mb-3">🪐</div>
-                <h3 className="text-xl font-bold mb-2">Profil Astrologique</h3>
-                <p className="text-white/90 text-sm">
-                  Découvrez votre carte du ciel et votre compatibilité
-                </p>
-              </div>
-
-              <div
-                onClick={() => setActiveSubTab("language")} // ✅ NOUVEAU : Sélection de langue
-                className="bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                <div className="text-3xl mb-3">🌐</div>
-                <h3 className="text-xl font-bold mb-2">Langues</h3>
-                <p className="text-white/90 text-sm">
-                  Sélectionnez votre langue de transcription
-                </p>
-              </div>
             </div>
           </div>
         );
     }
   };
 
-  // ✅ Contenu de l'immersion
+  // ✅ CONTENU DE L'IMMERSION
   const renderImmersionContent = () => {
     switch (activeImmersionTab) {
       case "parcours":
@@ -502,16 +470,14 @@ export default function SimplifiedHome({
                 {
                   id: "concentration",
                   name: "🧠 Concentration",
-                  description:
-                    "Améliore ta capacité de concentration avant l'enregistrement",
+                  description: "Améliore ta capacité de concentration avant l'enregistrement",
                   duration: "2-3 min",
                   color: "from-blue-500 to-cyan-600",
                 },
                 {
                   id: "confiance",
                   name: "💪 Confiance en soi",
-                  description:
-                    "Développe ta confiance pour une meilleure expression",
+                  description: "Développe ta confiance pour une meilleure expression",
                   duration: "2-3 min",
                   color: "from-green-500 to-emerald-600",
                 },
@@ -527,18 +493,13 @@ export default function SimplifiedHome({
                   key={activity.id}
                   className={`bg-gradient-to-br ${activity.color} rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg`}
                   onClick={() => {
-                    // Pour l'instant, on redirige vers l'enregistrement avec un message
                     setActiveTab("record");
                     toast.info(`Activité ${activity.name} sélectionnée`);
                   }}
                 >
-                  <div className="text-3xl mb-3">
-                    {activity.name.split(" ")[0]}
-                  </div>
+                  <div className="text-3xl mb-3">{activity.name.split(" ")[0]}</div>
                   <h3 className="font-bold text-lg mb-2">{activity.name}</h3>
-                  <p className="text-white/90 text-sm mb-3">
-                    {activity.description}
-                  </p>
+                  <p className="text-white/90 text-sm mb-3">{activity.description}</p>
                   <div className="text-xs bg-white/20 rounded-full px-3 py-1 inline-block">
                     ⏱️ {activity.duration}
                   </div>
@@ -579,14 +540,8 @@ export default function SimplifiedHome({
                     >
                       <p className="text-gray-200">{scenario}</p>
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-sm text-gray-400">
-                          ⏱️ 2 minutes maximum
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-blue-500 text-blue-300 text-xs"
-                        >
+                        <span className="text-sm text-gray-400">⏱️ 2 minutes maximum</span>
+                        <Button size="sm" variant="outline" className="border-blue-500 text-blue-300 text-xs">
                           Utiliser ce scénario →
                         </Button>
                       </div>
@@ -602,9 +557,7 @@ export default function SimplifiedHome({
         return (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">🎮</div>
-            <h3 className="text-xl font-semibold text-white mb-2">
-              Module d'Immersion
-            </h3>
+            <h3 className="text-xl font-semibold text-white mb-2">Module d'Immersion</h3>
             <p className="text-gray-300 mb-4">
               Préparez-vous à l'enregistrement avec nos exercices d'immersion
             </p>
@@ -619,16 +572,14 @@ export default function SimplifiedHome({
     }
   };
 
-  // ✅ CORRECTION : Contenu des onglets principaux avec intégration du sélecteur de langue amélioré
+  // ✅ CONTENU DES ONGLETS PRINCIPAUX
   const renderTabContent = () => {
     switch (activeTab) {
       case "record":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🎥 Enregistrer une Vidéo
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">🎥 Enregistrer une Vidéo</h2>
               <div className="flex gap-2">
                 <Button
                   onClick={() => setShowLanguageOptions((v) => !v)}
@@ -640,17 +591,13 @@ export default function SimplifiedHome({
               </div>
             </div>
 
-            {/* ✅ Options de langue affichées à la demande */}
             {showLanguageOptions && (
               <div className="card-spotbulle-dark p-6 bg-gray-800 border-gray-700">
                 <LanguageSelector
                   selectedLanguage={selectedLanguage}
                   onLanguageChange={(lang) => {
                     setSelectedLanguage(lang);
-                    console.log(
-                      "🌐 Langue sélectionnée pour transcription:",
-                      lang
-                    );
+                    console.log("🌐 Langue sélectionnée pour transcription:", lang);
                   }}
                   showAutoDetect={true}
                   compact={false}
@@ -661,7 +608,7 @@ export default function SimplifiedHome({
             <RecordVideo
               user={user}
               onVideoUploaded={handleVideoUploaded}
-              selectedLanguage={selectedLanguage} // ✅ BIEN PASSÉ
+              selectedLanguage={selectedLanguage}
               onError={(error) => {
                 console.error("❌ Erreur RecordVideo:", error);
                 setAppError(`Erreur enregistrement: ${error.message}`);
@@ -675,12 +622,8 @@ export default function SimplifiedHome({
           <div className="space-y-6">
             <div className="text-center py-12">
               <div className="text-6xl mb-4">✨</div>
-              <h3 className="text-2xl font-bold text-white mb-4">
-                SpotCoach - Dashboard Avancé
-              </h3>
-              <p className="text-gray-300 mb-6">
-                Fonctionnalité en cours de développement...
-              </p>
+              <h3 className="text-2xl font-bold text-white mb-4">SpotCoach - Dashboard Avancé</h3>
+              <p className="text-gray-300 mb-6">Fonctionnalité en cours de développement...</p>
               <Button
                 onClick={() => setActiveTab("dashboard")}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -695,9 +638,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                📁 Mes Vidéos
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">📁 Mes Vidéos</h2>
               <Button
                 onClick={() => setActiveTab("record")}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -718,9 +659,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                📊 Tableau de Bord Complet
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">📊 Tableau de Bord Complet</h2>
               <div className="flex gap-2">
                 <Button
                   onClick={() => setActiveTab("record")}
@@ -737,11 +676,7 @@ export default function SimplifiedHome({
                 </Button>
               </div>
             </div>
-
-            <Dashboard
-              refreshKey={refreshKey}
-              onVideoUploaded={handleVideoUploaded}
-            />
+            <Dashboard refreshKey={refreshKey} onVideoUploaded={handleVideoUploaded} />
           </div>
         );
 
@@ -749,9 +684,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                👤 Mon Profil
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">👤 Mon Profil</h2>
               <div className="flex gap-2">
                 <Button
                   onClick={() => setShowQuestionnaire(true)}
@@ -769,13 +702,12 @@ export default function SimplifiedHome({
                 </Button>
               </div>
             </div>
-            <ProfileForm
-              user={user}
-              profile={profile}
-              onProfileUpdated={handleProfileUpdated}
-            />
+            <ProfileForm user={user} profile={profile} onProfileUpdated={handleProfileUpdated} />
           </div>
         );
+
+      case "challenges": // ✅ NOUVEL ONGLET CHALLENGES
+        return renderChallengesContent();
 
       case "community":
         return renderCommunityContent();
@@ -788,7 +720,7 @@ export default function SimplifiedHome({
           <RecordVideo
             user={user}
             onVideoUploaded={handleVideoUploaded}
-            selectedLanguage={selectedLanguage} // ✅ PASSAGE DE LA LANGUE SÉLECTIONNÉE
+            selectedLanguage={selectedLanguage}
           />
         );
     }
@@ -803,16 +735,12 @@ export default function SimplifiedHome({
         connectionStatus={connectionStatus}
         onSignOut={onSignOut}
         currentSection={activeTab}
-        welcomeTitle={`🎯 Bienvenue${
-          profile?.full_name ? `, ${profile.full_name}` : ""
-        } !`}
+        welcomeTitle={`🎯 Bienvenue${profile?.full_name ? `, ${profile.full_name}` : ""} !`}
       />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        {/* En-tête déplacé dans ProfessionalHeader */}
-
-        {/* ✅ Affichage des erreurs globales */}
+        {/* Affichage des erreurs globales */}
         {(appError || error) && (
           <div className="mb-6 p-4 bg-red-900/30 border border-red-700 rounded-lg">
             <div className="flex items-center justify-between">
@@ -820,15 +748,11 @@ export default function SimplifiedHome({
                 <div className="h-5 w-5 text-red-400">⚠️</div>
                 <div>
                   <h4 className="font-semibold text-red-300">Erreur</h4>
-                  <p className="text-red-200 text-sm mt-1">
-                    {appError || error}
-                  </p>
+                  <p className="text-red-200 text-sm mt-1">{appError || error}</p>
                 </div>
               </div>
               <Button
-                onClick={() => {
-                  setAppError(null);
-                }}
+                onClick={() => setAppError(null)}
                 variant="outline"
                 size="sm"
                 className="border-red-600 text-red-300 hover:bg-red-800"
@@ -839,29 +763,26 @@ export default function SimplifiedHome({
           </div>
         )}
 
-        {/* ✅ Navigation par actions rapides */}
+        {/* Navigation par actions rapides */}
         <QuickActions
           simplifiedTabs={simplifiedTabs}
           activeTab={activeTab}
           onSelectTab={onSelectQuickAction}
         />
 
-        {/* ✅ Statistiques rapides */}
+        {/* Statistiques rapides */}
         {userStats && userStats.totalVideos > 0 && renderQuickStats()}
 
-        {/* ✅ Indicateur pour nouvelle utilisateur */}
+        {/* Indicateur pour nouvel utilisateur */}
         {userStats && userStats.totalVideos === 0 && activeTab !== "record" && (
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-lg mb-6 animate-pulse">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-xl">🎥</span>
                 <div>
-                  <p className="font-semibold">
-                    Commencez par enregistrer votre première vidéo !
-                  </p>
+                  <p className="font-semibold">Commencez par enregistrer votre première vidéo !</p>
                   <p className="text-sm opacity-90">
-                    Exprimez-vous devant la caméra et découvrez l'analyse
-                    automatique de votre contenu.
+                    Exprimez-vous devant la caméra et découvrez l'analyse automatique de votre contenu.
                   </p>
                 </div>
               </div>
@@ -881,7 +802,7 @@ export default function SimplifiedHome({
         </div>
       </main>
 
-      {/* ✅ Boutons d'action rapide flottants */}
+      {/* Boutons d'action rapide flottants */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
         {/* Bouton Chat Football */}
         <Button
@@ -901,15 +822,13 @@ export default function SimplifiedHome({
         </Button>
       </div>
 
-      {/* ✅ Modal Questionnaire */}
+      {/* Modal Questionnaire */}
       {showQuestionnaire && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-700">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">
-                  🎨 Test de Personnalité
-                </h2>
+                <h2 className="text-2xl font-bold text-white">🎨 Test de Personnalité</h2>
                 <Button
                   onClick={() => setShowQuestionnaire(false)}
                   variant="outline"
@@ -928,11 +847,8 @@ export default function SimplifiedHome({
         </div>
       )}
 
-      {/* ✅ Modal Chat Football */}
-      <FootballChatModal
-        isOpen={showChatModal}
-        onClose={() => setShowChatModal(false)}
-      />
+      {/* Modal Chat Football */}
+      <FootballChatModal isOpen={showChatModal} onClose={() => setShowChatModal(false)} />
 
       {/* Footer */}
       <footer className="mt-12 py-6 border-t border-gray-800 text-center text-gray-400">
