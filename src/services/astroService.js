@@ -6,11 +6,12 @@ export async function getAstroProfile(userId) {
       .from("astro_profiles")
       .select("*")
       .eq("user_id", userId)
-      .maybeSingle(); // Utiliser maybeSingle() au lieu de single() pour éviter les 406
+      .maybeSingle(); // Utiliser maybeSingle() pour éviter les erreurs 406
 
     if (error) {
-      if (error.code === "PGRST116") {
+      if (error.code === "PGRST116" || error.code === "406") {
         // Aucun profil trouvé - c'est normal pour un nouveau utilisateur
+        console.log("Aucun profil astrologique trouvé pour l'utilisateur:", userId);
         return null;
       }
       console.error("Error fetching astro profile:", error);
@@ -25,7 +26,7 @@ export async function getAstroProfile(userId) {
   }
 }
 
-// Le reste du service reste identique...
+// Le reste des fonctions reste inchangé...
 export async function updateBirthData(userId, birthData) {
   const { data, error } = await supabase
     .from("profiles")
