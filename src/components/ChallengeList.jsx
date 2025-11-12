@@ -1,8 +1,9 @@
+// src/components/ChallengeList.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getChallenges, submitChallenge, getUserVideosForChallenges } from '../services/challengeService';
 import { toast } from 'sonner';
-import { Button } from '../components/ui/button-enhanced.jsx';
+import { Button } from './ui/button-enhanced.jsx';
 
 const ChallengeList = () => {
   const { user } = useAuth();
@@ -122,17 +123,6 @@ const ChallengeList = () => {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-french font-bold text-white">🏆 SpotBulle Challenges</h2>
-          <Button
-            onClick={() => window.history.back()}
-            variant="outline"
-            className="flex items-center gap-2 border-gray-600 text-gray-300 hover:bg-gray-700"
-          >
-            ← Retour
-          </Button>
-        </div>
-        
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
           <p className="ml-4 text-gray-300">Chargement des défis...</p>
@@ -143,17 +133,6 @@ const ChallengeList = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-french font-bold text-white">🏆 SpotBulle Challenges</h2>
-        <Button
-          onClick={() => window.history.back()}
-          variant="outline"
-          className="flex items-center gap-2 border-gray-600 text-gray-300 hover:bg-gray-700"
-        >
-          ← Retour
-        </Button>
-      </div>
-
       {error && (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
           <div className="flex items-center">
