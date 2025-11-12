@@ -1,9 +1,9 @@
-// record-video.jsx - VERSION COMPLÈTE CORRIGÉE AVEC SOLUTION HTTPS
+// record-video.jsx - VERSION COMPLÈTE CORRIGÉE
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button-enhanced.jsx';
-import { supabase, refreshSession, invokeEdgeFunctionWithRetry } from '../lib/supabase';
+import { supabase, refreshSession } from '../lib/supabase';
 
 // ✅ CONSTANTES
 const VIDEO_STATUS = {
@@ -91,7 +91,57 @@ const TagInput = ({ tags, setTags }) => {
   );
 };
 
-// ✅ COMPOSANT PRINCIPAL CORRIGÉ AVEC SOLUTION HTTPS
+// ✅ FONCTION D'APPEL EDGE FUNCTION AVEC GESTION D'ERREUR
+const invokeEdgeFunctionWithRetry = async (functionName, body, options = {}) => {
+  const { maxRetries = 3, timeout = 30000 } = options;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Tentative ${attempt}/${maxRetries} pour ${functionName}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (error) {
+        console.error(`❌ Erreur ${functionName} (tentative ${attempt}):`, error);
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // Attendre avant de réessayer (backoff exponentiel)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+
+      console.log(`✅ ${functionName} réussi (tentative ${attempt})`);
+      return { data, error: null };
+
+    } catch (error) {
+      console.error(`❌ Erreur ${functionName} (tentative ${attempt}):`, error);
+      
+      if (attempt === maxRetries) {
+        return { data: null, error };
+      }
+      
+      if (error.name === 'AbortError') {
+        console.warn(`⏰ Timeout ${functionName} (tentative ${attempt})`);
+      }
+      
+      // Attendre avant de réessayer
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  
+  return { data: null, error: new Error(`Échec après ${maxRetries} tentatives`) };
+};
+
+// ✅ COMPOSANT PRINCIPAL CORRIGÉ
 const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) => {
   const [recording, setRecording] = useState(false);
   const [recordedVideo, setRecordedVideo] = useState(null);
@@ -194,7 +244,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     return () => clearInterval(timer);
   }, [recording]);
 
-  // ✅ Suivi de la progression CORRIGÉ
+  // ✅ Suivi de la progression
   useEffect(() => {
     if (!uploadedVideoId) return;
 
@@ -505,7 +555,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     }
   };
 
-  // ✅ Analyser tonalité
+  // ✅ Analyser tonalité - VERSION CORRIGÉE
   const analyzeRealTone = async (audioBlob) => {
     try {
       console.log('🎵 Début analyse de tonalité...');
@@ -517,15 +567,36 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
         return;
       }
 
+      // Conversion blob vers base64
+      const base64Audio = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const dataUrl = reader.result;
+            const base64 = dataUrl.split(',')[1];
+            console.log('✅ Conversion audio -> Base64 réussie, longueur:', base64?.length);
+            resolve(base64);
+          } catch (error) {
+            reject(new Error('Erreur traitement Base64: ' + error.message));
+          }
+        };
+        reader.onerror = () => reject(new Error('Erreur lecture fichier audio'));
+        reader.readAsDataURL(audioBlob);
+      });
+
+      if (!base64Audio) {
+        throw new Error('Conversion audio échouée');
+      }
+
       const requestBody = {
-        audio: await blobToBase64(audioBlob),
+        audio: base64Audio,
         userId: user.id,
         language: 'fr'
       };
 
       console.log('📤 Appel analyse tonalité...');
 
-      // ✅ UTILISATION DE LA NOUVELLE FONCTION AVEC RETRY ET HTTPS
+      // Utilisation de la fonction robuste avec retry
       const { data, error } = await invokeEdgeFunctionWithRetry('analyze-tone', requestBody, {
         maxRetries: 2,
         timeout: 15000
@@ -540,7 +611,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
 
       console.log('✅ Analyse tonalité réussie:', data);
       
-      if (data.success && data.analysis) {
+      if (data && data.analysis) {
         setToneAnalysis(data.analysis);
         toast.success('🎵 Analyse de tonalité terminée !');
       } else {
@@ -550,21 +621,10 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     } catch (err) {
       console.warn('⚠️ Erreur analyse tonalité, utilisation fallback:', err);
       setToneAnalysis(getFallbackToneAnalysis());
+      toast.info('Analyse de tonalité limitée - Mode basique activé');
     } finally {
       setIsAnalyzingTone(false);
     }
-  };
-
-  const blobToBase64 = (blob) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   };
 
   const getFallbackToneAnalysis = () => {
@@ -587,7 +647,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     };
   };
 
-  // ✅ Uploader vidéo CORRIGÉ AVEC GESTION HTTPS
+  // ✅ Uploader vidéo CORRIGÉ
   const uploadVideo = async () => {
     if (!recordedVideo) {
       setError('Vous devez enregistrer une vidéo.');
@@ -618,7 +678,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
         throw new Error('Le chemin de stockage ne peut pas être vide');
       }
 
-      // ✅ Upload avec progression
+      // Upload avec progression
       const { error: uploadError } = await supabase.storage
         .from('videos')
         .upload(filePath, recordedVideo.blob, {
@@ -648,7 +708,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
 
       console.log('🔗 URL publique:', urlData.publicUrl);
 
-      // ✅ VÉRIFICATION CRITIQUE : Tester l'URL
+      // Vérification de l'URL
       try {
         const urlCheck = await fetch(urlData.publicUrl, { method: 'HEAD' });
         console.log('🔍 Vérification URL:', {
@@ -712,7 +772,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
       setUploadedVideoId(videoData.id);
       toast.success('🎉 Vidéo uploadée avec succès !');
 
-      // ✅ CORRECTION CRITIQUE : Déclenchement transcription avec la nouvelle fonction robuste
+      // Déclenchement transcription avec gestion d'erreur
       try {
         await triggerTranscription(videoData.id, user.id, urlData.publicUrl);
       } catch (transcriptionError) {
@@ -751,7 +811,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     }
   };
 
-  // ✅ FONCTION TRIGGER TRANSCRIPTION CORRIGÉE AVEC SOLUTION HTTPS
+  // ✅ FONCTION TRIGGER TRANSCRIPTION CORRIGÉE
   const triggerTranscription = async (videoId, userId, videoPublicUrl) => {
     try {
       console.log('🚀 Déclenchement transcription...', {
@@ -761,7 +821,6 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
         selectedLanguage
       });
 
-      // ✅ PRÉPARATION BODY AVEC VALEURS PAR DÉFAUT
       const requestBody = {
         videoId: videoId,
         userId: userId,
@@ -775,11 +834,9 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
         videoUrl: requestBody.videoUrl?.substring(0, 80) + '...'
       });
 
-      // ✅ UTILISATION DE LA NOUVELLE FONCTION ROBUSTE AVEC RETRY ET HTTPS FALLBACK
       const { data, error } = await invokeEdgeFunctionWithRetry('transcribe-video', requestBody, {
         maxRetries: 3,
-        timeout: 30000,
-        useHttpsFallback: true
+        timeout: 30000
       });
 
       if (error) {
@@ -815,7 +872,7 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
     } catch (err) {
       console.error('❌ Erreur triggerTranscription:', err);
       
-      // ✅ SAUVEGARDE ERREUR EN BASE
+      // Sauvegarde erreur en base
       try {
         await supabase
           .from('videos')
@@ -829,7 +886,6 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
         console.error('❌ Erreur sauvegarde statut:', dbError);
       }
 
-      // ✅ MESSAGE D'ERREUR ADAPTÉ
       let userMessage = 'Erreur lors du déclenchement de la transcription';
       
       if (err.name === 'AbortError') {
@@ -894,15 +950,6 @@ const RecordVideo = ({ onVideoUploaded = () => {}, selectedLanguage = null }) =>
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 py-8">
       <div className="container mx-auto px-4 max-w-6xl">
-        {/* <div className="text-center mb-8"> */}
-          {/* <h1 className="text-4xl font-bold text-white mb-4">
-            🎥 Enregistrez votre vidéo SpotBulle
-          </h1> */}
-          {/* <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-            Partagez votre passion et connectez-vous avec la communauté
-          </p> */}
-        {/* </div> */}
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Caméra et contrôles */}
           <div className="space-y-4">
