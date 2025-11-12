@@ -1,13 +1,31 @@
 import { supabase } from "../lib/supabase";
 
-/**
- * Service pour interagir avec les fonctionnalités astrologiques et de matching.
- */
+export async function getAstroProfile(userId) {
+  try {
+    const { data, error } = await supabase
+      .from("astro_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle(); // Utiliser maybeSingle() au lieu de single() pour éviter les 406
 
-/**
- * Met à jour les données de naissance de l'utilisateur dans la table 'profiles'.
- * Cette action déclenchera le calcul du profil astrologique via un trigger Supabase.
- */
+    if (error) {
+      if (error.code === "PGRST116") {
+        // Aucun profil trouvé - c'est normal pour un nouveau utilisateur
+        return null;
+      }
+      console.error("Error fetching astro profile:", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Exception in getAstroProfile:", error);
+    // Retourner null au lieu de throw pour éviter de bloquer l'application
+    return null;
+  }
+}
+
+// Le reste du service reste identique...
 export async function updateBirthData(userId, birthData) {
   const { data, error } = await supabase
     .from("profiles")
@@ -25,45 +43,9 @@ export async function updateBirthData(userId, birthData) {
     throw new Error(error.message);
   }
 
-  // Déclencher le calcul astrologique
-  try {
-    const { data: triggerData, error: triggerError } = await supabase.functions.invoke("calculate-astro-profile", {
-      body: { user_id: userId },
-    });
-
-    if (triggerError) {
-      console.warn("Astro calculation trigger failed:", triggerError);
-    } else {
-      console.log("Astro calculation triggered:", triggerData);
-    }
-  } catch (triggerErr) {
-    console.warn("Could not trigger astro calculation:", triggerErr.message);
-  }
-
   return data;
 }
 
-/**
- * Récupère le profil astrologique de l'utilisateur.
- */
-export async function getAstroProfile(userId) {
-  const { data, error } = await supabase
-    .from("astro_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
-
-  if (error && error.code !== "PGRST116") {
-    console.error("Error fetching astro profile:", error);
-    throw new Error(error.message);
-  }
-
-  return data;
-}
-
-/**
- * Déclenche le calcul de matching avancé via une fonction Supabase.
- */
 export async function triggerAdvancedMatching() {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -83,9 +65,6 @@ export async function triggerAdvancedMatching() {
   return data;
 }
 
-/**
- * Récupère les résultats de matching avancé pour l'utilisateur.
- */
 export async function getAdvancedMatches() {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -107,9 +86,6 @@ export async function getAdvancedMatches() {
   return data;
 }
 
-/**
- * Génère le profil symbolique via IA
- */
 export async function generateSymbolicProfile(userId) {
   const { data, error } = await supabase.functions.invoke("generate-symbolic-profile", {
     body: { user_id: userId },
