@@ -29,6 +29,11 @@ const AstroDashboard = () => {
           console.warn("Matches non disponibles:", matchError.message);
           setMatches([]);
         }
+        
+        // Vérifier si le profil est complet (pour l'affichage du message de chargement)
+        if (profile && !profile.sun_sign) {
+            setError("Calcul astrologique en cours... Veuillez patienter quelques secondes.");
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -43,7 +48,9 @@ const AstroDashboard = () => {
 
   const handleProfileUpdate = (success) => {
     if (success) {
-      setTimeout(fetchAstroData, 5000);
+      // Afficher un message de chargement explicite pendant que le backend travaille
+      setLoading(true); 
+      setTimeout(fetchAstroData, 8000); // Augmenter le délai pour laisser le temps aux Edge Functions de s'exécuter
     }
   };
 
@@ -77,7 +84,7 @@ const AstroDashboard = () => {
   };
 
   if (loading) {
-    return <div className="dashboard-container">Chargement du tableau de bord Astro...</div>;
+    return <div className="dashboard-container text-center p-10 text-xl text-primary-400">Chargement du tableau de bord Astro...</div>;
   }
 
   return (
