@@ -60,18 +60,13 @@ const BirthDataForm = ({ onProfileUpdated }) => {
     setMessage("");
 
     try {
-      await updateBirthData(user.id, birthData);
-      setMessage("Données de naissance mises à jour. Calcul astrologique en cours...");
+      const updatedProfile = await updateBirthData(user.id, birthData);
+      setMessage("Données de naissance mises à jour. Le calcul astrologique est déclenché par le trigger de la base de données.");
       
-      // Attendre le calcul astrologique
-      setTimeout(async () => {
-        try {
-          const profile = await getAstroProfile(user.id);
-          if (profile && onProfileUpdated) {
-            onProfileUpdated(true);
-          }
-        } catch (error) {
-          console.error("Erreur récupération profil:", error);
+      // Le trigger de la DB appelle la Edge Function. Nous attendons un peu, puis nous demandons à AstroDashboard de se rafraîchir.
+      setTimeout(() => {
+        if (onProfileUpdated) {
+          onProfileUpdated(true);
         }
       }, 5000);
       
