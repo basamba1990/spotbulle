@@ -1,5 +1,5 @@
 // supabase/functions/transcribe-video/index.ts
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3'
+import { createClient } from 'npm:@supabase/supabase-js@2.44.0'
 import OpenAI from 'npm:openai@4.28.0'
 
 const VIDEO_STATUS = {
@@ -12,13 +12,8 @@ const VIDEO_STATUS = {
   FAILED: 'failed'
 }
 
-// ✅ CORRECTION CORS DÉFINITIVE
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
-  'Content-Type': 'application/json',
-}
+// Utilisation de corsHeaders partagé
+import { corsHeaders } from "../_shared/http.ts";
 
 // ✅ SUPPORT MULTILINGUE
 const SUPPORTED_LANGUAGES = {
