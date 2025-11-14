@@ -1,6 +1,6 @@
 // calculate-astro-profile/index.ts
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.0";
+import { createClient } from "npm:@supabase/supabase-js@2.44.0";
+import { corsHeaders } from "../_shared/http.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -11,11 +11,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Utilisation de corsHeaders partagé depuis _shared/http.ts
 
 // Service de géocoding amélioré avec gestion d'erreur
 async function geocodeLocation(place: string) {
@@ -241,7 +237,7 @@ function extractAstroSigns(astroData: any) {
   };
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Gestion CORS
   if (req.method === 'OPTIONS') {
     return new Response(null, {
