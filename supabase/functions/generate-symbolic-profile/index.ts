@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.44.0";
 import OpenAI from "npm:openai@4.28.0";
-import { corsHeaders } from "../_shared/http.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -10,22 +9,15 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-// Génération du prompt pour GPT-4 basé sur les données astrologiques réelles
 function generateSymbolicProfilePrompt(astroProfile: any) {
   const planetaryDetails = Object.entries(astroProfile.planetary_positions || {})
-    .map(([planet, data]: [string, any]) => 
-      `${planet} en ${data.sign} (Maison ${data.house}, ${data.degree}°)`
-    )
+    .map(([planet, data]: [string, any]) => `${planet} en ${data.sign} (Maison ${data.house}, ${data.degree}°)`)
     .join(", ");
 
   const housesDetails = (astroProfile.houses_data || [])
-    .map((house: any, index: number) => 
-      `Maison ${index + 1}: ${house.sign}`
-    )
+    .map((house: any, index: number) => `Maison ${index + 1}: ${house.sign}`)
     .join(", ");
 
   return `
@@ -65,11 +57,10 @@ Deno.serve(async (req) => {
     if (!user_id) {
       return new Response(JSON.stringify({ error: "User ID manquant" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
-    // 1. Récupération du profil astrologique réel
     const { data: astroProfile, error: fetchError } = await supabaseAdmin
       .from("astro_profiles")
       .select("sun_sign, moon_sign, rising_sign, planetary_positions, houses_data, archetype_profile")
@@ -79,14 +70,12 @@ Deno.serve(async (req) => {
     if (fetchError || !astroProfile) {
       return new Response(
         JSON.stringify({ error: "Profil astrologique non trouvé. Exécutez d'abord calculate-astro-profile." }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // 2. Génération du profil symbolique avec GPT-4
-    console.log("🧠 Generating symbolic profile with GPT-4...");
     const prompt = generateSymbolicProfilePrompt(astroProfile);
-    
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -102,9 +91,7 @@ Deno.serve(async (req) => {
     });
 
     const symbolicData = JSON.parse(completion.choices[0].message.content!);
-    console.log("✅ Symbolic profile generated:", symbolicData.symbolic_archetype);
 
-    // 3. Sauvegarde du profil symbolique
     const { error: updateError } = await supabaseAdmin
       .from("astro_profiles")
       .update({
@@ -117,10 +104,9 @@ Deno.serve(async (req) => {
       .eq("user_id", user_id);
 
     if (updateError) {
-      console.error("❌ Database error:", updateError);
       return new Response(
         JSON.stringify({ error: "Erreur lors de la sauvegarde du profil symbolique" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -130,16 +116,15 @@ Deno.serve(async (req) => {
         profile: symbolicData,
         tokens_used: completion.usage?.total_tokens
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { "Content-Type": "application/json" } }
     );
 
   } catch (error) {
-    console.error("❌ General error in generate-symbolic-profile:", error);
     return new Response(
       JSON.stringify({ 
         error: `Erreur lors de la génération du profil symbolique: ${error.message}` 
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 });
