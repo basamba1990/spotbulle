@@ -13,7 +13,7 @@ const VIDEO_STATUS = {
 }
 
 // Utilisation de corsHeaders partagé
-import { corsHeaders } from "../_shared/http.ts";
+import { corsHeaders } from "shared/http";
 
 // ✅ SUPPORT MULTILINGUE
 const SUPPORTED_LANGUAGES = {
