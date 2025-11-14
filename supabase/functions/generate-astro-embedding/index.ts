@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.44.0";
+import { createClient } from "npm:@supabase/supabase-js@2.44.0";
+import { corsHeaders } from "../_shared/http.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -89,14 +89,14 @@ const generateEmbedding = async (text: string): Promise<number[]> => {
   }
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   try {
     const { user_id } = await req.json();
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "User ID manquant" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -110,7 +110,7 @@ serve(async (req) => {
     if (fetchError || !astroProfile) {
       return new Response(
         JSON.stringify({ error: "Profil astrologique non trouvé. Exécutez d'abord calculate-astro-profile." }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -130,7 +130,7 @@ serve(async (req) => {
       console.error("❌ Database error:", updateError);
       return new Response(
         JSON.stringify({ error: "Erreur lors de la sauvegarde de l'embedding" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -139,7 +139,7 @@ serve(async (req) => {
         message: "Astro embedding généré et sauvegardé avec succès",
         embedding_size: embedding.length,
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
@@ -148,7 +148,7 @@ serve(async (req) => {
       JSON.stringify({ 
         error: `Erreur lors de la génération de l'embedding: ${error.message}` 
       }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
