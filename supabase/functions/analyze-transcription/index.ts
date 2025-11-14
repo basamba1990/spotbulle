@@ -1,24 +1,12 @@
 // supabase/functions/analyze-transcription/index.ts
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3'
+import { createClient } from 'npm:@supabase/supabase-js@2.44.0'
 import OpenAI from 'npm:openai@4.28.0'
 
 // ✅ CACHE PERFORMANT
 const analysisCache = new Map();
 const CACHE_TTL = 30 * 60 * 1000;
 
-// ✅ SYSTÈME DE RETRY AMÉLIORÉ
-const retryWithBackoff = async (fn: () => Promise<any>, maxRetries = 3, baseDelay = 1000) => {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt === maxRetries - 1) throw error;
-      const delay = baseDelay * Math.pow(2, attempt);
-      await new Promise(resolve => setTimeout(resolve, delay + Math.random() * 1000));
-      console.log(`🔄 Retry attempt ${attempt + 1} after ${delay}ms`);
-    }
-  }
-};
+import { retryWithBackoff } from "../_shared/retry.ts";
 
 const VIDEO_STATUS = {
   UPLOADED: 'uploaded',
@@ -30,13 +18,8 @@ const VIDEO_STATUS = {
   FAILED: 'failed'
 };
 
-// ✅ CORRECTION CORS - Headers complets
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
-  'Content-Type': 'application/json',
-};
+// Utilisation de corsHeaders partagé
+import { corsHeaders } from "../_shared/http.ts";
 
 // ✅ PROMPTS AVANCÉS POUR GPT-4
 const ANALYSIS_PROMPTS = {
