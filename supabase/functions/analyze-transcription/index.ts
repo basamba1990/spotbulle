@@ -6,7 +6,7 @@ import OpenAI from 'npm:openai@4.28.0'
 const analysisCache = new Map();
 const CACHE_TTL = 30 * 60 * 1000;
 
-import { retryWithBackoff } from "../_shared/retry.ts";
+import { retryWithBackoff } from "shared/retry";
 
 const VIDEO_STATUS = {
   UPLOADED: 'uploaded',
@@ -19,7 +19,7 @@ const VIDEO_STATUS = {
 };
 
 // Utilisation de corsHeaders partagé
-import { corsHeaders } from "../_shared/http.ts";
+import { corsHeaders } from "shared/http";
 
 // ✅ PROMPTS AVANCÉS POUR GPT-4
 const ANALYSIS_PROMPTS = {
