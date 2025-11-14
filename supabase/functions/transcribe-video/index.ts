@@ -1,14 +1,6 @@
 // supabase/functions/transcribe-video/index.ts
-import { createClient } from 'npm:@supabase/supabase-js@2.44.0'
+import { createClient } from 'npm:@supabase/supabase-js@2.39.3'
 import OpenAI from 'npm:openai@4.28.0'
-
-// Intégration de corsHeaders
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS, GET, PUT, DELETE",
-  "Content-Type": "application/json",
-};
 
 const VIDEO_STATUS = {
   UPLOADED: 'uploaded',
@@ -18,6 +10,14 @@ const VIDEO_STATUS = {
   ANALYZED: 'analyzed',
   PUBLISHED: 'published',
   FAILED: 'failed'
+}
+
+// ✅ CORRECTION CORS DÉFINITIVE
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
+  'Content-Type': 'application/json',
 }
 
 // ✅ SUPPORT MULTILINGUE
@@ -250,9 +250,8 @@ Deno.serve(async (req) => {
       console.log('🔧 Format détecté: mp4')
     }
 
-    // La fonction File n'est pas disponible dans Deno, mais on peut simuler l'objet pour l'API OpenAI
     const whisperConfig: any = {
-      file: videoBlob, // L'API OpenAI Deno SDK gère la conversion de Blob/File en multipart/form-data
+      file: new File([videoBlob], fileName, { type: fileType }),
       model: 'whisper-1',
       response_format: 'verbose_json',
       temperature: 0.0,
@@ -339,8 +338,6 @@ Deno.serve(async (req) => {
     // ✅ DÉCLENCHEMENT ANALYSE (OPTIONNEL)
     console.log("🚀 Déclenchement analyse...")
     try {
-      // L'appel à une autre fonction Edge par `supabase.functions.invoke` est conservé
-      // car il n'utilise pas `_shared/` et est une fonctionnalité Supabase standard.
       const { error: analyzeError } = await supabase.functions.invoke('analyze-transcription', {
         body: {
           videoId,
