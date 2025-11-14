@@ -1,6 +1,6 @@
 // calculate-astro-profile/index.ts
 import { createClient } from "npm:@supabase/supabase-js@2.44.0";
-import { corsHeaders } from "../_shared/http.ts";
+import { corsHeaders } from "shared/http";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
