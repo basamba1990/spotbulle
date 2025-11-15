@@ -1,20 +1,19 @@
 import { createClient } from "npm:@supabase/supabase-js@2.44.0";
 
-// Intégration de corsHeaders
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS, GET, PUT, DELETE",
-  "Content-Type": "application/json",
-};
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
+
+// ✅ Headers CORS standardisés
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
+  'Content-Type': 'application/json',
+};
 
 // Service de géocoding pour convertir les lieux en coordonnées
 async function geocodeLocation(place: string): Promise<{ lat: number; lon: number; city: string; country: string }> {
@@ -54,6 +53,7 @@ async function geocodeLocation(place: string): Promise<{ lat: number; lon: numbe
 
 // Intégration Réelle: Appel à l'API OpenAI Embeddings
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+
 /**
  * Génère un embedding vectoriel à partir d'un texte en utilisant l'API OpenAI.
  * @param text Le texte à encoder.
@@ -97,23 +97,64 @@ const generateEmbedding = async (text: string): Promise<number[]> => {
 };
 
 Deno.serve(async (req) => {
-  // Gestion CORS
+  console.log("🧠 generate-astro-embedding appelée");
+
+  // ✅ Gestion CORS
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
+    return new Response('ok', { 
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Max-Age': '86400',
+      }
     });
   }
-  
+
   try {
-    const { user_id } = await req.json();
+    // ✅ Vérification méthode
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ error: "Méthode non autorisée. Utilisez POST." }),
+        { 
+          status: 405, 
+          headers: corsHeaders 
+        }
+      );
+    }
+
+    let requestBody;
+    try {
+      const rawBody = await req.text();
+      if (!rawBody || rawBody.trim().length === 0) {
+        throw new Error('Corps de requête vide');
+      }
+      requestBody = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('❌ Erreur parsing JSON:', parseError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'JSON invalide',
+          details: parseError.message
+        }),
+        { 
+          status: 400, 
+          headers: corsHeaders 
+        }
+      );
+    }
+
+    const { user_id } = requestBody;
 
     if (!user_id) {
-      return new Response(JSON.stringify({ error: "User ID manquant" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "User ID manquant" }),
+        { 
+          status: 400, 
+          headers: corsHeaders 
+        }
+      );
     }
+
+    console.log("👤 Processing user:", user_id);
 
     // 1. Récupération du profil astrologique réel
     const { data: astroProfile, error: fetchError } = await supabaseAdmin
@@ -123,38 +164,61 @@ Deno.serve(async (req) => {
       .single();
 
     if (fetchError || !astroProfile) {
+      console.error('❌ Profil astrologique non trouvé:', fetchError);
       return new Response(
-        JSON.stringify({ error: "Profil astrologique non trouvé. Exécutez d'abord calculate-astro-profile." }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ 
+          error: "Profil astrologique non trouvé. Exécutez d'abord calculate-astro-profile." 
+        }),
+        { 
+          status: 404, 
+          headers: corsHeaders 
+        }
       );
     }
+
+    console.log("✅ Profil astrologique trouvé");
 
     // 2. Créer une description textuelle pour l'embedding
     const description = `Profil astrologique de l'utilisateur ${user_id}: Signe Solaire ${astroProfile.sun_sign}, Signe Lunaire ${astroProfile.moon_sign}, Ascendant ${astroProfile.rising_sign}. Archétype: ${astroProfile.archetype_profile?.dominant_element || "Non défini"} ${astroProfile.archetype_profile?.dominant_modality || "Non défini"}. Profil Symbolique: ${astroProfile.symbolic_profile_text || "Non généré"}`;
 
+    console.log("📝 Génération embedding pour description:", description.length, "caractères");
+
     // 3. Générer l'embedding
     const embedding = await generateEmbedding(description);
+    console.log("✅ Embedding généré:", embedding.length, "dimensions");
 
     // 4. Sauvegarder l'embedding dans la table astro_profiles
+    console.log("💾 Sauvegarde embedding...");
     const { error: updateError } = await supabaseAdmin
       .from("astro_profiles")
-      .update({ astro_embedding: embedding })
+      .update({ 
+        astro_embedding: embedding,
+        embedding_generated_at: new Date().toISOString()
+      })
       .eq("user_id", user_id);
 
     if (updateError) {
       console.error("❌ Database error:", updateError);
       return new Response(
         JSON.stringify({ error: "Erreur lors de la sauvegarde de l'embedding" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { 
+          status: 500, 
+          headers: corsHeaders 
+        }
       );
     }
+
+    console.log("✅ Embedding sauvegardé");
 
     return new Response(
       JSON.stringify({
         message: "Astro embedding généré et sauvegardé avec succès",
         embedding_size: embedding.length,
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { 
+        status: 200, 
+        headers: corsHeaders 
+      }
     );
 
   } catch (error) {
@@ -163,7 +227,10 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         error: `Erreur lors de la génération de l'embedding: ${error.message}` 
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { 
+        status: 500, 
+        headers: corsHeaders 
+      }
     );
   }
 });
