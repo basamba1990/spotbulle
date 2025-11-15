@@ -1,22 +1,21 @@
-// calculate-astro-profile/index.ts
 import { createClient } from "npm:@supabase/supabase-js@2.44.0";
-
-// Intégration de corsHeaders
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS, GET, PUT, DELETE",
-  "Content-Type": "application/json",
-};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ASTRO_API_URL = Deno.env.get("VITE_ASTRO_API_URL") || "https://astrologer.p.rapidapi.com";
-const ASTRO_API_KEY = Deno.env.get("VITE_ASTRO_API_KEY")!;
+const ASTRO_API_URL = Deno.env.get("ASTRO_API_URL") || "https://astrologer.p.rapidapi.com";
+const ASTRO_API_KEY = Deno.env.get("ASTRO_API_KEY")!;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
+
+// ✅ Headers CORS standardisés
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
+  'Content-Type': 'application/json',
+};
 
 // Service de géocoding amélioré avec gestion d'erreur
 async function geocodeLocation(place: string) {
@@ -243,29 +242,33 @@ function extractAstroSigns(astroData: any) {
 }
 
 Deno.serve(async (req) => {
-  // Gestion CORS
+  console.log("🔮 calculate-astro-profile appelée");
+
+  // ✅ Gestion CORS
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
+    return new Response('ok', { 
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Max-Age': '86400',
+      }
     });
   }
 
   try {
     console.log("🔮 Starting astro profile calculation...");
     
-    // Vérifier la méthode
+    // ✅ Vérification méthode
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: "Méthode non autorisée. Utilisez POST." }),
         { 
           status: 405, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
 
-    // Lecture robuste du corps
+    // ✅ Lecture robuste du corps
     let body;
     try {
       const bodyText = await req.text();
@@ -282,7 +285,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "JSON invalide dans le corps de la requête" }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
@@ -294,7 +297,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "User ID manquant" }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
@@ -314,7 +317,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Profil utilisateur non trouvé" }),
         { 
           status: 404, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
@@ -331,80 +334,117 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Date de naissance requise" }),
         { 
           status: 400, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
 
     // 2. Géocoding
+    console.log("🗺️ Geocoding location:", profile.birth_place);
     const coordinates = await geocodeLocation(profile.birth_place || "Paris, France");
+    
+    // 3. Timezone (simplifié pour l'Europe)
+    const timezone = "Europe/Paris";
 
-    // 3. Détermination du fuseau horaire (simplifié pour l'exemple)
-    // Dans un cas réel, une API de fuseau horaire serait nécessaire.
-    // Pour l'instant, on utilise un fuseau horaire par défaut ou on essaie de le déduire.
-    const timezone = "Europe/Paris"; 
-    console.log("⏳ Using timezone:", timezone);
+    // 4. Calcul astrologique
+    console.log("🔮 Calculating astro chart...");
+    const astroCalculation = await calculateRealAstroChart(profile, coordinates, timezone);
+    const astroSigns = extractAstroSigns(astroCalculation);
 
-    // 4. Calcul du thème astral
-    const astroData = await calculateRealAstroChart(profile, coordinates, timezone);
+    console.log("✅ Astro signs calculated:", {
+      sun: astroSigns.sun_sign,
+      moon: astroSigns.moon_sign,
+      rising: astroSigns.rising_sign
+    });
 
-    // 5. Extraction des signes et archétypes
-    const { sun_sign, moon_sign, rising_sign, planetary_positions, houses, archetype_profile } = extractAstroSigns(astroData);
+    // 5. Préparation des données pour la sauvegarde
+    const astroProfileData = {
+      user_id: user_id,
+      birth_data: {
+        ...profile,
+        coordinates: coordinates,
+        timezone: timezone
+      },
+      astro_calculation: astroCalculation,
+      sun_sign: astroSigns.sun_sign,
+      moon_sign: astroSigns.moon_sign,
+      rising_sign: astroSigns.rising_sign,
+      planetary_positions: astroSigns.planetary_positions,
+      houses_data: astroSigns.houses,
+      archetype_profile: astroSigns.archetype_profile,
+      calculation_source: astroCalculation.sun?.sign ? "api" : "fallback",
+      is_mock: !astroCalculation.sun?.sign,
+      calculated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
 
-    // 6. Sauvegarde dans la table astro_profiles
-    const { error: upsertError } = await supabaseAdmin
+    // 6. Sauvegarde dans la base de données
+    console.log("💾 Saving astro profile to database...");
+    const { error: insertError } = await supabaseAdmin
       .from("astro_profiles")
-      .upsert(
-        {
-          user_id: user_id,
-          sun_sign: sun_sign,
-          moon_sign: moon_sign,
-          rising_sign: rising_sign,
-          planetary_positions: planetary_positions,
-          houses_data: houses,
-          archetype_profile: archetype_profile,
-          birth_location: coordinates.display_name,
-          last_calculated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
+      .upsert(astroProfileData, { 
+        onConflict: 'user_id',
+        ignoreDuplicates: false 
+      });
 
-    if (upsertError) {
-      console.error("❌ Error saving astro profile:", upsertError);
+    if (insertError) {
+      console.error("❌ Database error:", insertError);
       return new Response(
-        JSON.stringify({ error: "Erreur lors de la sauvegarde du profil astral" }),
+        JSON.stringify({ error: `Erreur base de données: ${insertError.message}` }),
         { 
           status: 500, 
-          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+          headers: corsHeaders 
         }
       );
     }
 
-    console.log("✅ Astro profile calculated and saved successfully for user:", user_id);
+    console.log("✅ Astro profile saved successfully");
+
+    // 7. Déclencher les calculs suivants de manière asynchrone
+    console.log("🚀 Triggering follow-up calculations...");
+    try {
+      // Génération d'embedding astrologique
+      await supabaseAdmin.functions.invoke('generate-astro-embedding', {
+        body: { user_id }
+      }).catch(err => console.warn("⚠️ Embedding generation skipped:", err.message));
+
+      // Génération du profil symbolique
+      await supabaseAdmin.functions.invoke('generate-symbolic-profile', {
+        body: { user_id }
+      }).catch(err => console.warn("⚠️ Symbolic profile skipped:", err.message));
+
+    } catch (followupError) {
+      console.warn("⚠️ Follow-up calculations had issues:", followupError);
+    }
 
     return new Response(
       JSON.stringify({
-        message: "Profil astral calculé et sauvegardé avec succès",
-        profile: {
-          sun_sign,
-          moon_sign,
-          rising_sign,
-          archetype_profile,
-          birth_location: coordinates.display_name,
-        },
+        success: true,
+        message: "Profil astrologique calculé avec succès",
+        data: {
+          sun_sign: astroSigns.sun_sign,
+          moon_sign: astroSigns.moon_sign,
+          rising_sign: astroSigns.rising_sign,
+          calculation_source: astroProfileData.calculation_source,
+          archetype: astroSigns.archetype_profile
+        }
       }),
       { 
         status: 200, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: corsHeaders 
       }
     );
+
   } catch (error) {
-    console.error("❌ Global error in calculate-astro-profile:", error);
+    console.error("❌ General error in calculate-astro-profile:", error);
     return new Response(
-      JSON.stringify({ error: `Erreur interne du serveur: ${error.message}` }),
+      JSON.stringify({ 
+        error: `Erreur lors du calcul: ${error.message}`,
+        details: "Vérifiez les données de naissance et réessayez"
+      }),
       { 
         status: 500, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: corsHeaders 
       }
     );
   }
