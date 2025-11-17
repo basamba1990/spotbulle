@@ -1,4 +1,6 @@
 // src/pages/SimplifiedHome.jsx
+// Version optimisée avec intégration SpotCoach Pro
+
 import React, { useState, useEffect } from "react";
 import Dashboard from "../components/Dashboard.jsx";
 import RecordVideo from "./record-video.jsx";
@@ -8,28 +10,20 @@ import VideoVault from "./video-vault.jsx";
 import { Button } from "../components/ui/button-enhanced.jsx";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
+import { useSupabaseClient } from "@supabase/auth-helpers-react";
 
-// ✅ IMPORTS COMPLETS
+// Import des composants existants
 import Questionnaire from "../components/Questionnaire.jsx";
 import SeminarsList from "../components/SeminarsList.jsx";
 import Certification from "../components/Certification.jsx";
 import ImmersionSimulator from "../components/ImmersionSimulator.jsx";
 import ComplementaryMatches from "../components/ComplementaryMatches.jsx";
-import ChallengeList from "../components/ChallengeList.jsx"; // ✅ IMPORT CORRECT
 import LanguageSelector from "../components/LanguageSelector.jsx";
 import FootballChatModal from "../components/FootballChatModal.jsx";
 import QuickActions from "../components/QuickActions.jsx";
 
-// ✅ NAVIGATION SIMPLIFIÉE AVEC CHALLENGES INTÉGRÉ
+// Navigation simplifiée avec SpotCoach Pro en priorité
 const simplifiedTabs = [
-  {
-    id: "spotcoach",
-    name: "✨ SpotCoach",
-    icon: "✨",
-    priority: 0,
-    description: "Dashboard Avancé et KPI",
-  },
   {
     id: "record",
     name: "🎥 Enregistrer",
@@ -38,32 +32,33 @@ const simplifiedTabs = [
     description: "Créer une nouvelle vidéo",
   },
   {
+    id: "spotcoach",
+    name: "🎯 SpotCoach Pro",
+    icon: "🎯",
+    priority: 2,
+    description: "Profil symbolique professionnel",
+    badge: "PRO"
+  },
+  {
     id: "vault",
     name: "📁 Mes Vidéos",
     icon: "📁",
-    priority: 2,
+    priority: 3,
     description: "Gérer toutes mes vidéos",
   },
   {
     id: "dashboard",
     name: "📊 Tableau de bord",
     icon: "📊",
-    priority: 3,
+    priority: 4,
     description: "Voir mes statistiques",
   },
   {
     id: "profile",
     name: "👤 Profil",
     icon: "👤",
-    priority: 4,
-    description: "Gérer mon compte",
-  },
-  {
-    id: "challenges",
-    name: "🏆 Challenges",
-    icon: "🏆",
     priority: 5,
-    description: "Participer aux défis",
+    description: "Gérer mon compte",
   },
   {
     id: "community",
@@ -105,9 +100,8 @@ export default function SimplifiedHome({
   const [showLanguageOptions, setShowLanguageOptions] = useState(false);
 
   const supabase = useSupabaseClient();
-  const currentUser = useUser();
 
-  // ✅ CHARGEMENT DES STATISTIQUES UTILISATEUR
+  // Chargement des statistiques utilisateur
   useEffect(() => {
     const loadUserStats = async () => {
       if (!user) return;
@@ -115,7 +109,7 @@ export default function SimplifiedHome({
       try {
         const { data: videos, error } = await supabase
           .from("videos")
-          .select("id, status, created_at, title, duration")
+          .select("id, status, created_at, title")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
@@ -124,13 +118,8 @@ export default function SimplifiedHome({
         const stats = {
           totalVideos: videos?.length || 0,
           recentVideos: videos?.slice(0, 3) || [],
-          completedVideos: videos?.filter((v) => 
-            v.status === "analyzed" || v.status === "published" || v.status === "completed"
-          ).length || 0,
-          processingVideos: videos?.filter((v) => 
-            v.status === "processing" || v.status === "analyzing" || v.status === "uploading"
-          ).length || 0,
-          totalDuration: videos?.reduce((total, video) => total + (video.duration || 0), 0) || 0,
+          completedVideos: videos?.filter((v) => v.status === "analyzed").length || 0,
+          processingVideos: videos?.filter((v) => v.status === "processing" || v.status === "analyzing").length || 0,
         };
 
         setUserStats(stats);
@@ -143,7 +132,6 @@ export default function SimplifiedHome({
     loadUserStats();
   }, [user, supabase, refreshKey]);
 
-  // ✅ GESTIONNAIRES D'ÉVÉNEMENTS
   const handleVideoUploaded = () => {
     console.log("🔄 Vidéo uploadée, rechargement des données");
     setRefreshKey((prev) => prev + 1);
@@ -175,95 +163,51 @@ export default function SimplifiedHome({
     toast.success(`Langue sélectionnée: ${languageCode || "Détection automatique"}`);
   };
 
-  // ✅ SCÉNARIOS D'ENREGISTREMENT
-  const recordingScenarios = {
-    enfants: [
-      "🎙 Dis-moi pourquoi tu aimes ton sport préféré.",
-      "🎙 Qu'est-ce que tu ressens quand tu marques un but / réussis ton coup ?",
-      "🎙 Si tu devais inventer ton club idéal, à quoi ressemblerait-il ?",
-    ],
-    adolescents: [
-      "🎙 Comment le foot (ou ton sport) t'aide à grandir dans la vie ?",
-      "🎙 Raconte un moment où tu as douté, mais où tu t'es relevé.",
-      "🎙 Où te vois-tu dans 5 ans grâce à ta passion ?",
-      "🎙 Quel joueur ou joueuse t'inspire le plus, et pourquoi ?",
-    ],
-    adultes: [
-      "🎙 Comment ton sport reflète ta personnalité ?",
-      "🎙 Quel lien fais-tu entre ton sport et ta vie professionnelle ?",
-      "🎙 Que t'apprend ton sport sur la gestion de la pression, de l'échec ou du leadership ?",
-    ],
-  };
-
-  // ✅ NAVIGATION PAR ACTIONS RAPIDES
+  // Navigation par actions rapides
   const onSelectQuickAction = (id) => {
+    if (id === "spotcoach") {
+      navigate("/spotcoach");
+      return;
+    }
     setActiveTab(id);
     if (id === "more") setActiveSubTab("main");
   };
 
-  // ✅ STATISTIQUES RAPIDES AMÉLIORÉES
+  // Statistiques rapides
   const renderQuickStats = () => {
     if (!userStats || userStats.totalVideos === 0) return null;
 
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <div className="bg-blue-900/30 rounded-lg p-4 text-center border border-blue-700">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-4 text-center border border-blue-500 shadow-lg">
           <div className="text-2xl font-bold text-white">{userStats.totalVideos}</div>
-          <div className="text-blue-300 text-sm">Total Vidéos</div>
+          <div className="text-blue-100 text-sm">Total Vidéos</div>
         </div>
-        <div className="bg-green-900/30 rounded-lg p-4 text-center border border-green-700">
+        <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg p-4 text-center border border-green-500 shadow-lg">
           <div className="text-2xl font-bold text-white">{userStats.completedVideos}</div>
-          <div className="text-green-300 text-sm">Analysées</div>
+          <div className="text-green-100 text-sm">Analysées</div>
         </div>
-        <div className="bg-purple-900/30 rounded-lg p-4 text-center border border-purple-700">
+        <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-4 text-center border border-purple-500 shadow-lg">
           <div className="text-2xl font-bold text-white">{userStats.recentVideos.length}</div>
-          <div className="text-purple-300 text-sm">Récentes</div>
+          <div className="text-purple-100 text-sm">Récentes</div>
         </div>
-        <div className="bg-yellow-900/30 rounded-lg p-4 text-center border border-yellow-700">
+        <div className="bg-gradient-to-br from-amber-600 to-orange-600 rounded-lg p-4 text-center border border-amber-500 shadow-lg">
           <div className="text-2xl font-bold text-white">{userStats.processingVideos}</div>
-          <div className="text-yellow-300 text-sm">En traitement</div>
-        </div>
-        <div className="bg-cyan-900/30 rounded-lg p-4 text-center border border-cyan-700">
-          <div className="text-2xl font-bold text-white">
-            {Math.round(userStats.totalDuration / 60)} min
-          </div>
-          <div className="text-cyan-300 text-sm">Durée totale</div>
+          <div className="text-amber-100 text-sm">En traitement</div>
         </div>
       </div>
     );
   };
 
-  // ✅ CONTENU DE L'ONGLET CHALLENGES (NOUVEAU)
-  const renderChallengesContent = () => {
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-french font-bold text-white">
-            🏆 SpotBulle Challenges
-          </h2>
-          <Button
-            onClick={() => setActiveTab("record")}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            🎥 Nouvelle Vidéo
-          </Button>
-        </div>
-        <ChallengeList />
-      </div>
-    );
-  };
-
-  // ✅ CONTENU DE L'ONGLET COMMUNITY
+  // Contenu de l'onglet "Community"
   const renderCommunityContent = () => {
     return (
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-french font-bold text-white">
-            👥 Communauté & Synergies
-          </h2>
+          <h2 className="text-2xl font-french font-bold text-white">👥 Communauté & Synergies</h2>
           <Button
             onClick={() => setActiveTab("record")}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg"
           >
             🎥 Nouvelle Vidéo
           </Button>
@@ -273,16 +217,14 @@ export default function SimplifiedHome({
     );
   };
 
-  // ✅ CONTENU DE L'ONGLET "PLUS" SIMPLIFIÉ
+  // Contenu de l'onglet "Plus"
   const renderMoreContent = () => {
     switch (activeSubTab) {
       case "seminars":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🎓 Séminaires & Formations
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">🎓 Séminaires & Formations</h2>
               <Button
                 onClick={() => setActiveSubTab("main")}
                 variant="outline"
@@ -299,9 +241,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🏆 Certification
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">🏆 Certification</h2>
               <Button
                 onClick={() => setActiveSubTab("main")}
                 variant="outline"
@@ -318,9 +258,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🎮 Préparation & Immersion
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">🎮 Préparation & Immersion</h2>
               <div className="flex gap-2">
                 <Button
                   variant={activeImmersionTab === "parcours" ? "default" : "outline"}
@@ -353,9 +291,7 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                🌐 Sélection de la Langue
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">🌐 Sélection de la Langue</h2>
               <Button
                 onClick={() => setActiveSubTab("main")}
                 variant="outline"
@@ -376,12 +312,10 @@ export default function SimplifiedHome({
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">
-                ➕ Fonctionnalités Avancées
-              </h2>
+              <h2 className="text-2xl font-french font-bold text-white">➕ Fonctionnalités Avancées</h2>
               <Button
                 onClick={() => setActiveTab("record")}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg"
               >
                 🎥 Nouvelle Vidéo
               </Button>
@@ -390,7 +324,7 @@ export default function SimplifiedHome({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div
                 onClick={() => setActiveSubTab("seminars")}
-                className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
                 <div className="text-3xl mb-3">🎓</div>
                 <h3 className="text-xl font-bold mb-2">Séminaires</h3>
@@ -401,7 +335,7 @@ export default function SimplifiedHome({
 
               <div
                 onClick={() => setActiveSubTab("certification")}
-                className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                className="bg-gradient-to-br from-green-600 to-green-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
                 <div className="text-3xl mb-3">🏆</div>
                 <h3 className="text-xl font-bold mb-2">Certification</h3>
@@ -412,7 +346,7 @@ export default function SimplifiedHome({
 
               <div
                 onClick={() => setActiveSubTab("immersion")}
-                className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
                 <div className="text-3xl mb-3">🎮</div>
                 <h3 className="text-xl font-bold mb-2">Préparation</h3>
@@ -422,35 +356,35 @@ export default function SimplifiedHome({
               </div>
 
               <div
-                onClick={() => navigate("/astro-dashboard")}
-                className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                onClick={() => setActiveTab("community")}
+                className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
-                <div className="text-3xl mb-3">🪐</div>
-                <h3 className="text-xl font-bold mb-2">Profil Astrologique</h3>
+                <div className="text-3xl mb-3">👥</div>
+                <h3 className="text-xl font-bold mb-2">Communauté</h3>
                 <p className="text-white/90 text-sm">
-                  Découvrez votre carte du ciel et votre compatibilité
-                </p>
-              </div>
-
-              <div
-                onClick={() => setActiveSubTab("language")}
-                className="bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                <div className="text-3xl mb-3">🌐</div>
-                <h3 className="text-xl font-bold mb-2">Langues</h3>
-                <p className="text-white/90 text-sm">
-                  Sélectionnez votre langue de transcription
+                  Rencontrez d'autres passionnés
                 </p>
               </div>
 
               <div
                 onClick={() => setShowQuestionnaire(true)}
-                className="bg-gradient-to-br from-pink-600 to-pink-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg"
+                className="bg-gradient-to-br from-pink-600 to-pink-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
               >
                 <div className="text-3xl mb-3">🎨</div>
                 <h3 className="text-xl font-bold mb-2">Test Personnalité</h3>
                 <p className="text-white/90 text-sm">
                   Découvrez votre profil unique
+                </p>
+              </div>
+
+              <div
+                onClick={() => setActiveSubTab("language")}
+                className="bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl"
+              >
+                <div className="text-3xl mb-3">🌐</div>
+                <h3 className="text-xl font-bold mb-2">Langues</h3>
+                <p className="text-white/90 text-sm">
+                  Sélectionnez votre langue de transcription
                 </p>
               </div>
             </div>
@@ -459,7 +393,7 @@ export default function SimplifiedHome({
     }
   };
 
-  // ✅ CONTENU DE L'IMMERSION
+  // Contenu de l'immersion
   const renderImmersionContent = () => {
     switch (activeImmersionTab) {
       case "parcours":
@@ -491,7 +425,7 @@ export default function SimplifiedHome({
               ].map((activity) => (
                 <div
                   key={activity.id}
-                  className={`bg-gradient-to-br ${activity.color} rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg`}
+                  className={`bg-gradient-to-br ${activity.color} rounded-xl p-6 text-white cursor-pointer transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl`}
                   onClick={() => {
                     setActiveTab("record");
                     toast.info(`Activité ${activity.name} sélectionnée`);
@@ -512,15 +446,26 @@ export default function SimplifiedHome({
       case "scenarios":
         return (
           <div className="space-y-6">
-            <h3 className="text-xl font-french font-bold text-white mb-4">
-              🎬 Scénarios d'Expression Orale
-            </h3>
-
-            {Object.entries(recordingScenarios).map(([ageGroup, scenarios]) => (
-              <div
-                key={ageGroup}
-                className="card-spotbulle-dark p-6 bg-gray-800 border-gray-700"
-              >
+            <h3 className="text-xl font-french font-bold text-white mb-4">🎬 Scénarios d'Expression Orale</h3>
+            {Object.entries({
+              enfants: [
+                "🎙 Dis-moi pourquoi tu aimes ton sport préféré.",
+                "🎙 Qu'est-ce que tu ressens quand tu marques un but / réussis ton coup ?",
+                "🎙 Si tu devais inventer ton club idéal, à quoi ressemblerait-il ?",
+              ],
+              adolescents: [
+                "🎙 Comment le foot (ou ton sport) t'aide à grandir dans la vie ?",
+                "🎙 Raconte un moment où tu as douté, mais où tu t'es relevé.",
+                "🎙 Où te vois-tu dans 5 ans grâce à ta passion ?",
+                "🎙 Quel joueur ou joueuse t'inspire le plus, et pourquoi ?",
+              ],
+              adultes: [
+                "🎙 Comment ton sport reflète ta personnalité ?",
+                "🎙 Quel lien fais-tu entre ton sport et ta vie professionnelle ?",
+                "🎙 Que t'apprend ton sport sur la gestion de la pression, de l'échec ou du leadership ?",
+              ],
+            }).map(([ageGroup, scenarios]) => (
+              <div key={ageGroup} className="card-spotbulle-dark p-6 bg-gray-800 border-gray-700">
                 <h4 className="text-lg font-semibold text-white mb-4 capitalize">
                   {ageGroup === "enfants"
                     ? "👦 Pour les Jeunes (8-12 ans)"
@@ -563,7 +508,7 @@ export default function SimplifiedHome({
             </p>
             <Button
               onClick={() => setActiveImmersionTab("parcours")}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white"
             >
               Commencer l'immersion
             </Button>
@@ -572,7 +517,7 @@ export default function SimplifiedHome({
     }
   };
 
-  // ✅ CONTENU DES ONGLETS PRINCIPAUX
+  // Contenu des onglets principaux
   const renderTabContent = () => {
     switch (activeTab) {
       case "record":
@@ -617,31 +562,14 @@ export default function SimplifiedHome({
           </div>
         );
 
-      case "spotcoach":
-        return (
-          <div className="space-y-6">
-            <div className="text-center py-12">
-              <div className="text-6xl mb-4">✨</div>
-              <h3 className="text-2xl font-bold text-white mb-4">SpotCoach - Dashboard Avancé</h3>
-              <p className="text-gray-300 mb-6">Fonctionnalité en cours de développement...</p>
-              <Button
-                onClick={() => setActiveTab("dashboard")}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                📊 Aller au Tableau de Bord
-              </Button>
-            </div>
-          </div>
-        );
-
       case "vault":
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-french font-bold text-white">📁 Mes Vidéos</h2>
+              <h2 className="text-2xl font-french font-bold text-white">📁 Mon Coffre-fort Vidéo</h2>
               <Button
                 onClick={() => setActiveTab("record")}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg"
               >
                 🎥 Nouvelle Vidéo
               </Button>
@@ -663,7 +591,7 @@ export default function SimplifiedHome({
               <div className="flex gap-2">
                 <Button
                   onClick={() => setActiveTab("record")}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg"
                 >
                   🎥 Nouvelle Vidéo
                 </Button>
@@ -705,9 +633,6 @@ export default function SimplifiedHome({
             <ProfileForm user={user} profile={profile} onProfileUpdated={handleProfileUpdated} />
           </div>
         );
-
-      case "challenges": // ✅ NOUVEL ONGLET CHALLENGES
-        return renderChallengesContent();
 
       case "community":
         return renderCommunityContent();
@@ -752,7 +677,9 @@ export default function SimplifiedHome({
                 </div>
               </div>
               <Button
-                onClick={() => setAppError(null)}
+                onClick={() => {
+                  setAppError(null);
+                }}
                 variant="outline"
                 size="sm"
                 className="border-red-600 text-red-300 hover:bg-red-800"
@@ -773,41 +700,50 @@ export default function SimplifiedHome({
         {/* Statistiques rapides */}
         {userStats && userStats.totalVideos > 0 && renderQuickStats()}
 
-        {/* Indicateur pour nouvel utilisateur */}
+        {/* Indicateur pour nouvelle utilisateur */}
         {userStats && userStats.totalVideos === 0 && activeTab !== "record" && (
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-lg mb-6 animate-pulse">
+          <div className="bg-gradient-to-r from-amber-600 to-orange-600 text-white p-4 rounded-lg mb-6 animate-pulse shadow-lg">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-xl">🎥</span>
+                <span className="text-xl">🎯</span>
                 <div>
-                  <p className="font-semibold">Commencez par enregistrer votre première vidéo !</p>
+                  <p className="font-semibold">Commencez par découvrir votre profil SpotCoach Pro !</p>
                   <p className="text-sm opacity-90">
-                    Exprimez-vous devant la caméra et découvrez l'analyse automatique de votre contenu.
+                    Obtenez votre analyse symbolique personnalisée pour mieux vous connaître.
                   </p>
                 </div>
               </div>
               <Button
-                onClick={() => setActiveTab("record")}
-                className="bg-white text-blue-600 hover:bg-gray-100 border-0 font-semibold"
+                onClick={() => navigate("/spotcoach")}
+                className="bg-white text-amber-600 hover:bg-gray-100 border-0 font-semibold shadow-lg"
               >
-                🎥 Commencer
+                🎯 Découvrir
               </Button>
             </div>
           </div>
         )}
 
         {/* Contenu de l'onglet */}
-        <div className="card-spotbulle-dark p-6 bg-gray-800 border-gray-700 rounded-xl">
+        <div className="card-spotbulle-dark p-6 bg-gray-800 border-gray-700 rounded-xl shadow-2xl">
           {renderTabContent()}
         </div>
       </main>
 
       {/* Boutons d'action rapide flottants */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3">
+        {/* Bouton SpotCoach Pro */}
+        <Button
+          onClick={() => navigate("/spotcoach")}
+          className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg text-lg py-3 px-4 rounded-full flex items-center gap-2 hover:scale-105 transition-transform"
+          title="SpotCoach Pro"
+        >
+          🎯
+        </Button>
+
         {/* Bouton Chat Football */}
         <Button
           onClick={() => setShowChatModal(true)}
-          className="bg-green-600 hover:bg-green-700 text-white shadow-lg text-lg py-3 px-4 rounded-full flex items-center gap-2 hover:scale-105 transition-transform"
+          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg text-lg py-3 px-4 rounded-full flex items-center gap-2 hover:scale-105 transition-transform"
           title="Assistant Football"
         >
           ⚽
@@ -816,7 +752,7 @@ export default function SimplifiedHome({
         {/* Bouton Nouvelle Vidéo */}
         <Button
           onClick={() => setActiveTab("record")}
-          className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg text-lg py-4 px-6 rounded-full flex items-center gap-2 animate-bounce"
+          className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-lg text-lg py-4 px-6 rounded-full flex items-center gap-2 animate-bounce shadow-xl"
         >
           🎥 Nouvelle Vidéo
         </Button>
@@ -852,7 +788,7 @@ export default function SimplifiedHome({
 
       {/* Footer */}
       <footer className="mt-12 py-6 border-t border-gray-800 text-center text-gray-400">
-        <p>© 2024 SpotBulle - Tous droits réservés</p>
+        <p>© 2025 SpotBulle - Tous droits réservés</p>
       </footer>
     </div>
   );
