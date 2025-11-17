@@ -33,7 +33,7 @@ import FourColorsTest from "@/components/FourColorsTest.jsx";
 import SeminarsList from "@/components/SeminarsList.jsx";
 import Certification from "@/components/Certification.jsx";
 import SimplifiedHome from "@/pages/SimplifiedHome.jsx";
-import AstroDashboard from "@/pages/AstroDashboard.jsx"; // Import de la nouvelle page
+import SpotCoach from "@/pages/SpotCoach.jsx";
 
 import "./App.css";
 import "./styles/design-system.css";
@@ -55,7 +55,7 @@ const RequireAuth = ({ children, fallbackPath = "/login" }) => {
     }
   }, [user, loading, navigate, fallbackPath]);
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <LoadingScreen
         message="Vérification de sécurité..."
@@ -340,7 +340,14 @@ const AppContent = () => {
         <Route path="/psg-signin" element={<PsgSignin />} />
         <Route path="/test-chat" element={<FootballChatTest />} />
         <Route path="/premium" element={<SpotBullePremium />} />
-        <Route path="/astro-dashboard" element={<RequireAuth><AstroDashboard /></RequireAuth>} />
+        <Route
+          path="/spotcoach"
+          element={
+            <RequireAuth>
+              <SpotCoach />
+            </RequireAuth>
+          }
+        />
 
         {/* Routes protégées */}
         <Route
