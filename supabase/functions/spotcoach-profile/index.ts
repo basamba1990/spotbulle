@@ -228,7 +228,7 @@ ${astroFacts}
 }
 
 async function callOpenAi(prompt: string, signal?: AbortSignal): Promise<AiSymbolicProfile> {
-  const apiKey = ensureEnv("OPENAI_API_KEY");
+  const apiKey = ensureEnv("OPENAI_API_KEY_PREMIUM");
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
